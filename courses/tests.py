@@ -480,7 +480,6 @@ class PrereqTests(CourseTestCase):
         # 同一學期的加選不算「修過」，只有過去學期才算
         a = self.section("CS301", "A", 3, 5)
         self.with_prereq(a, "CS201")
-        past = self.past_section("CS201")
         cur = self.section("CS201", "A", 1, 2)
         Enrollment.objects.create(user=self.u, section=cur)  # 本學期選了 CS201（但先修比的是 past course 的 code）
         # 本學期那筆的 course.term 是 is_current=True → 不算已修
@@ -554,3 +553,35 @@ class SlotFilterTests(CourseTestCase):
     def test_form_remembers_selection(self):
         r = self.client.get(reverse("course_list"), {"slot": "pm"})
         self.assertContains(r, 'value="pm" selected')
+
+
+class PrereqLimitTests(CourseTestCase):
+    """先修課至多 2 門；走 admin 的新增與編輯頁面。"""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(get_user_model().objects.create_superuser("root", password="pw"))
+
+    def course_data(self, code, *prereq_codes):
+        return {"term": self.term.pk, "code": code, "name": "測試課", "teacher": self.teacher.pk,
+                "credits": 3, "syllabus": "",
+                "prerequisites": [self.course(c).pk for c in prereq_codes]}
+
+    def test_add_course_with_two_prereqs_saves(self):
+        r = self.client.post(reverse("admin:courses_course_add"), self.course_data("CS999", "CS101", "CS202"))
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(Course.objects.get(term=self.term, code="CS999").prerequisites.count(), 2)
+
+    def test_add_course_with_three_prereqs_is_rejected(self):
+        r = self.client.post(reverse("admin:courses_course_add"),
+                             self.course_data("CS999", "CS101", "CS202", "CS303"))
+        self.assertContains(r, "先修課程最多設 2 門。")
+        self.assertFalse(Course.objects.filter(term=self.term, code="CS999").exists())
+
+    def test_edit_course_to_three_prereqs_is_rejected(self):
+        target = self.course("CS999")
+        target.prerequisites.set([self.course("CS101"), self.course("CS202")])
+        r = self.client.post(reverse("admin:courses_course_change", args=[target.pk]),
+                             self.course_data("CS999", "CS101", "CS202", "CS303"))
+        self.assertContains(r, "先修課程最多設 2 門。")
+        self.assertEqual(target.prerequisites.count(), 2)
