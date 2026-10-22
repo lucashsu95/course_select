@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -26,6 +27,16 @@ class Course(models.Model):
 
     class Meta:
         ordering = ["code"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(start_period__gte=1) & models.Q(end_period__gte=models.F("start_period")),
+                name="course_periods_valid",
+            ),
+        ]
+
+    def clean(self):
+        if self.start_period and self.end_period and self.end_period < self.start_period:
+            raise ValidationError({"end_period": "結束節次不可早於起始節次。"})
 
     def __str__(self):
         return f"{self.code} {self.name}"
@@ -37,6 +48,15 @@ class Course(models.Model):
     @property
     def periods(self):
         return self.end_period - self.start_period + 1
+
+    @property
+    def enrolled_count(self):
+        annotated = getattr(self, "enrolled", None)  # 有 annotate 就用現成的，沒有才查
+        return self.enrollment_set.count() if annotated is None else annotated
+
+    @property
+    def is_full(self):
+        return self.enrolled_count >= self.capacity
 
     def conflicts_with(self, other):
         return (self.day == other.day and self.start_period <= other.end_period
