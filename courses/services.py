@@ -43,13 +43,17 @@ def register(user, section):
             return Result("conflict",
                           f"衝堂：和「{clash.course.name} {clash.label_display}」時間重疊。")
         if section.is_full:
-            wait = Waitlist.objects.filter(user=user, section=section).first()
+            wait = Waitlist.objects.filter(user=user, section=section,
+                                           promoted_at__isnull=True).first()
             if wait:
                 return Result("already_waitlisted",
                               f"{section.label_display}已額滿，你已在等待名單（第 {wait.position} 位）。")
-            Waitlist.objects.create(user=user, section=section)
+            # 「遞補過後來又退選」的歷史列不佔順位、也擋不到新排隊，先清掉再建
+            Waitlist.objects.filter(user=user, section=section,
+                                    promoted_at__isnull=False).delete()
+            wait = Waitlist.objects.create(user=user, section=section)
             return Result("waitlisted",
-                          f"{section.label_display}已額滿，已加入等待名單（第 {section.waitlists.count()} 位），有人退選將自動遞補。")
+                          f"{section.label_display}已額滿，已加入等待名單（第 {wait.position} 位），有人退選將自動遞補。")
         # 同一門課至多一個班別是 service 層規則；DB 允許 admin 手動造成同課兩班，故按課號去重算學分
         total = sum({s.course_id: s.course.credits for s in mine}.values()) + course.credits
         if total > settings.MAX_CREDITS:
@@ -61,8 +65,13 @@ def register(user, section):
 
 
 def drop_enrollment(user, section):
-    """退選一個班別；釋出的名額立即遞補等待名單第一位（同 transaction）。"""
+    """退選一個班別；釋出的名額立即遞補等待名單第一位（同 transaction）。
+
+    先鎖 Section（與 register() 同一把鎖、同樣先 Section 的順序），
+    避免退選＋遞補與並發加選互相穿插造成超收（換 PostgreSQL 後生效）。
+    """
     with transaction.atomic():
+        Section.objects.select_for_update().get(pk=section.pk)
         deleted, _ = Enrollment.objects.filter(user=user, section=section).delete()
         if not deleted:
             return False
@@ -70,22 +79,45 @@ def drop_enrollment(user, section):
         return True
 
 
+def _next_waiter(section, exclude=()):
+    # 只鎖 waitlist 列本身（of=("self",)），不連帶鎖 User/Course，
+    # 避免與 register() 的鎖順序不同造成 deadlock
+    return (Waitlist.objects.filter(section=section, promoted_at__isnull=True)
+            .exclude(pk__in=exclude)
+            .select_for_update(of=("self",)).first())
+
+
 def _promote_next(section):
-    """該班等待名單第一位轉為正式加選；若其已選同課另一班則移出並順延下一位。"""
+    """該班等待名單第一位轉為正式加選（FIFO，不越序）。
+
+    若該位「已選同課另一班」或「與已選班別衝堂」，該列移出名單、順延下一位。
+    遞補不重查學分上限（見 docs 已知限制）。
+    """
     now = timezone.now()
-    wait = (Waitlist.objects.filter(section=section, promoted_at__isnull=True)
-            .select_related("user", "section__course").select_for_update().first())
-    while wait:
+    seen = []
+    while True:
+        wait = _next_waiter(section, exclude=seen)
+        if wait is None:
+            return
+        seen.append(wait.pk)
         course = wait.section.course
         if Enrollment.objects.filter(user=wait.user, section__course=course).exists():
             # 排隊後又選了同課另一班：不再符合等待條件，移出名單後看下一位
             wait.delete()
-            wait = (Waitlist.objects.filter(section=section, promoted_at__isnull=True)
-                    .select_related("user", "section__course").select_for_update().first())
             continue
+        mine = list(Section.objects.filter(enrollments__user=wait.user,
+                                           course__term=course.term))
+        if next((s for s in mine if s.conflicts_with(wait.section)), None):
+            # 與已選班別衝堂：同樣移出、順延（維持「不衝堂」不變式）
+            wait.delete()
+            continue
+        if section.is_full:  # 建立前重查容量（正常退選後必有空位，純防禦）
+            return
         Enrollment.objects.create(user=wait.user, section=section)
         wait.promoted_at = now
         wait.save(update_fields=["promoted_at"])
+        # 人已遞補進這門課，該課其他班的等待紀錄同步清掉
+        Waitlist.objects.filter(user=wait.user, section__course=course).exclude(pk=wait.pk).delete()
         return
 
 

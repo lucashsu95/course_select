@@ -3,6 +3,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
@@ -134,6 +135,16 @@ def cancel_wait(request, pk):
     else:
         messages.info(request, "你沒有在等這個班別。")
     return _redirect_next(request, "my_schedule")
+
+
+@login_required
+@require_POST
+def ack_promotion(request):
+    """明確確認遞補通知（banner 的「知道了」）；GET 不寫庫。"""
+    Waitlist.objects.filter(user=request.user,
+                            promoted_at__isnull=False,
+                            promoted_seen_at__isnull=True).update(promoted_seen_at=timezone.now())
+    return _redirect_next(request, "course_list")
 
 
 @login_required

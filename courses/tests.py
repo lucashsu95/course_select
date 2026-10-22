@@ -2,7 +2,7 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -367,9 +367,78 @@ class WaitlistTests(CourseTestCase):
         self.assertEqual(r.code, "already")
         self.assertFalse(Waitlist.objects.filter(user=self.u).exists())
 
-    def test_banner_shown_once(self):
+    def test_banner_shown_until_acked(self):
         self.client.force_login(self.u)
         register(self.u, self.a)
         drop_enrollment(self.v, self.a)
+        # GET 不消耗通知：反覆開頁面 banner 都在
         self.assertContains(self.client.get(reverse("my_schedule")), "你已遞補進")
+        self.assertContains(self.client.get(reverse("my_schedule")), "你已遞補進")
+        # 明確 POST 之後才消失
+        self.client.post(reverse("ack_promotion"), follow=True)
         self.assertNotContains(self.client.get(reverse("my_schedule")), "你已遞補進")
+
+    def test_admin_page_does_not_consume_banner(self):
+        self.client.force_login(self.u)
+        register(self.u, self.a)
+        drop_enrollment(self.v, self.a)
+        self.client.get("/admin/")  # 任何不顯示 banner 的渲染都不能吃掉通知
+        self.assertContains(self.client.get(reverse("my_schedule")), "你已遞補進")
+
+    def test_cancel_wait_rejects_get_and_anonymous(self):
+        self.client.force_login(self.u)
+        register(self.u, self.a)
+        self.assertEqual(self.client.get(reverse("cancel_wait", args=[self.a.pk])).status_code, 405)
+        anon = Client()
+        r = anon.post(reverse("cancel_wait", args=[self.a.pk]))
+        self.assertIn("/accounts/google/login/", r.headers["Location"])
+        self.assertTrue(Waitlist.objects.filter(user=self.u).exists())
+
+    def test_requeue_after_promotion_and_drop(self):
+        # 被遞補 → 退選 → 班別再額滿 → 重新排隊不能卡死
+        register(self.u, self.a)
+        drop_enrollment(self.v, self.a)  # u 被遞補
+        self.assertTrue(Enrollment.objects.filter(user=self.u, section=self.a).exists())
+        drop_enrollment(self.u, self.a)  # u 又退選
+        w = get_user_model().objects.create_user("w")
+        self.assertEqual(register(w, self.a).code, "enrolled")  # 再額滿
+        r = register(self.u, self.a)
+        self.assertEqual(r.code, "waitlisted")  # 不再是 already_waitlisted
+        self.assertIn("第 1 位", r.message)
+        self.assertTrue(cancel_waitlist(self.u, self.a))  # 取消也要動得了
+
+    def test_position_message_after_promotion(self):
+        # 發生過遞補後，新加入者的「第 N 位」不能把歷史列算進去
+        w1 = get_user_model().objects.create_user("w1")
+        register(w1, self.a)
+        drop_enrollment(self.v, self.a)  # w1 被遞補，A 班又額滿
+        w2 = get_user_model().objects.create_user("w2")
+        r = register(w2, self.a)
+        self.assertEqual(r.code, "waitlisted")
+        self.assertIn("第 1 位", r.message)
+        self.assertNotIn("第 2 位", r.message)
+
+    def test_promotion_clears_other_same_course_wait(self):
+        # 遞補進 A 班後，同課 B 班的等待紀錄要同步清掉
+        b = self.section("A", "B", 4, 5, capacity=1)
+        w = get_user_model().objects.create_user("w")
+        Enrollment.objects.create(user=w, section=b)  # B 班額滿
+        register(self.u, self.a)
+        register(self.u, b)
+        drop_enrollment(self.v, self.a)  # u 遞補進 A 班
+        self.assertTrue(Enrollment.objects.filter(user=self.u, section=self.a).exists())
+        self.assertFalse(Waitlist.objects.filter(
+            user=self.u, section=b, promoted_at__isnull=True).exists())
+
+    def test_promotion_skips_conflicting_waiter(self):
+        # 排隊第一的人選了與本班衝堂的課 → 遞補時移出、順延下一位
+        c = self.section("C", "A", 1, 2)  # 與 A 班同時段
+        register(self.u, self.a)  # 第 1 位
+        self.assertEqual(register(self.u, c).code, "enrolled")
+        w2 = get_user_model().objects.create_user("w2")
+        register(w2, self.a)  # 第 2 位
+        drop_enrollment(self.v, self.a)  # 只開一個位置
+        self.assertTrue(Enrollment.objects.filter(user=w2, section=self.a).exists())
+        self.assertFalse(Enrollment.objects.filter(user=self.u, section=self.a).exists())
+        # u 的等待列已被移出
+        self.assertFalse(Waitlist.objects.filter(user=self.u, section=self.a).exists())
