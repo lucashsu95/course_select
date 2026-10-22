@@ -83,25 +83,6 @@ class Course(models.Model):
                 and other.start_period <= self.end_period)
 
 
-class Comment(models.Model):
-    MAX_LENGTH = 500
-
-    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="comments")
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    body = models.TextField("內容")
-    created = models.DateTimeField("留言時間", auto_now_add=True)
-
-    class Meta:
-        ordering = ["created"]  # 同一門課的留言照時間排，先問的先讀
-
-    def __str__(self):
-        return f"{self.author_name}：{self.body[:20]}"
-
-    @property
-    def author_name(self):
-        return self.user.first_name or self.user.username
-
-
 class Enrollment(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     course = models.ForeignKey(Course, on_delete=models.CASCADE)

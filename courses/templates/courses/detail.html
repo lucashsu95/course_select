@@ -54,40 +54,6 @@
   </aside>
 </div>
 
-<section class="comments" id="comments">
-  <div class="comments-head">
-    <h2>留言</h2><span class="num">{{ comments|length }} 則</span>
-  </div>
-
-  {% if user.is_authenticated %}
-  <form method="post" action="{% url 'add_comment' course.pk %}" class="comment-form">{% csrf_token %}
-    <label class="sr-only" for="comment-body">留言內容</label>
-    <textarea id="comment-body" name="body" maxlength="{{ comment_max }}" required
-              placeholder="問課程內容、loading、評分方式…"></textarea>
-    <div class="row">
-      <span class="hint">最多 {{ comment_max }} 字</span>
-      <button class="btn btn-primary">送出留言</button>
-    </div>
-  </form>
-  {% else %}
-  <p class="login-hint">登入後才能留言 · <a href="{% url 'google_login' %}">以 Google 登入</a></p>
-  {% endif %}
-
-  <ol class="comment-list">
-    {% for c in comments %}
-    <li class="comment">
-      <div class="comment-head">
-        <span class="comment-author">{{ c.author_name }}</span>
-        <time class="comment-time" datetime="{{ c.created|date:'c' }}">{{ c.created|date:"Y-m-d H:i" }}</time>
-      </div>
-      <p class="comment-body">{{ c.body|linebreaksbr }}</p>
-    </li>
-    {% empty %}
-    <li class="comment-empty">還沒有人留言。</li>
-    {% endfor %}
-  </ol>
-</section>
-
 {% if related %}
 <section class="related">
   <h2>{{ course.teacher }} 的其他課程</h2>

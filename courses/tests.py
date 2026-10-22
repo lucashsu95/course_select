@@ -3,7 +3,7 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from .models import Comment, Course, Enrollment, Teacher, Term
+from .models import Course, Enrollment, Teacher, Term
 from .services import register
 
 
@@ -98,47 +98,6 @@ class EnrollViewTests(CourseTestCase):
     def test_pages_render(self):
         for name, args in [("course_list", []), ("course_detail", [self.a.pk]), ("my_schedule", [])]:
             self.assertEqual(self.client.get(reverse(name, args=args)).status_code, 200)
-
-
-class CommentTests(CourseTestCase):
-    def setUp(self):
-        super().setUp()
-        self.a = self.course("A", 1, 2)
-        self.url = reverse("add_comment", args=[self.a.pk])
-
-    def post(self, body, **kwargs):
-        return self.client.post(self.url, {"body": body}, **kwargs)
-
-    def test_login_required(self):
-        r = self.post("hi")
-        self.assertEqual(r.status_code, 302)
-        self.assertIn(reverse("google_login"), r["Location"])
-        self.assertEqual(self.a.comments.count(), 0)
-
-    def test_posts_and_lists(self):
-        self.client.force_login(self.u)
-        r = self.post("  會點名嗎？  ", follow=True)
-        self.assertEqual(r.redirect_chain[-1][0], reverse("course_detail", args=[self.a.pk]))
-        c = self.a.comments.get()
-        self.assertEqual(c.body, "會點名嗎？")
-        self.assertContains(r, "會點名嗎？")
-
-    def test_blank_is_rejected(self):
-        self.client.force_login(self.u)
-        r = self.post("   ", follow=True)
-        self.assertEqual(self.a.comments.count(), 0)
-        self.assertContains(r, "留言不能是空白。")
-
-    def test_too_long_is_rejected(self):
-        self.client.force_login(self.u)
-        r = self.post("字" * (Comment.MAX_LENGTH + 1), follow=True)
-        self.assertEqual(self.a.comments.count(), 0)
-        self.assertContains(r, "留言最多")
-
-    def test_anonymous_sees_login_hint_not_form(self):
-        r = self.client.get(reverse("course_detail", args=[self.a.pk]))
-        self.assertContains(r, "登入後才能留言")
-        self.assertNotContains(r, self.url)
 
 
 class TeacherRoleTests(CourseTestCase):
