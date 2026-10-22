@@ -8,6 +8,7 @@
   </div>
   <div class="action">
     {% if user.is_authenticated %}
+      {% if is_teacher %}<a class="btn btn-secondary" href="{% url 'course_roster' course.pk %}">選課名單</a>{% endif %}
       {% include "courses/_action.html" with is_mine=is_mine primary=1 %}
     {% else %}
       <p class="login-hint">登入後才能加選 · <a href="{% url 'google_login' %}">以 Google 登入</a></p>

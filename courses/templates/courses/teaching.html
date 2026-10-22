@@ -1,0 +1,38 @@
+{% extends "courses/base.html" %}
+{% block title %}我的課程{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>我的課程</h1>
+    <p class="sub">共 <span class="num">{{ courses|length }}</span> 門課</p>
+  </div>
+</div>
+
+<div class="list-head" aria-hidden="true">
+  <span>課程</span><span>課號</span><span>時間</span><span class="right">學分</span><span class="right">名額</span><span></span>
+</div>
+<ul class="courses">
+  {% for course in courses %}
+  <li class="course-row">
+    <div class="identity">
+      <a class="course-name" href="{% url 'course_roster' course.pk %}">{{ course.name }}</a>
+    </div>
+    <div class="meta">
+      <span class="c-code">{{ course.code }}</span>
+      <span class="c-time">{{ course.time_display }}</span>
+      <span class="c-credits num">{{ course.credits }} 學分</span>
+    </div>
+    <div class="seats">
+      <span class="seats-num num">{{ course.enrolled }}<span class="of"> / {{ course.capacity }}</span></span>
+      {% if course.is_full %}<span class="full-flag">額滿</span>{% endif %}
+      <span class="track" aria-hidden="true"><span style="width:{% widthratio course.enrolled course.capacity 100 %}%"></span></span>
+    </div>
+    <div class="action">
+      <a class="btn btn-secondary" href="{% url 'course_roster' course.pk %}">選課名單</a>
+    </div>
+  </li>
+  {% empty %}
+  <li class="empty">這學期沒有你的課程。</li>
+  {% endfor %}
+</ul>
+{% endblock %}

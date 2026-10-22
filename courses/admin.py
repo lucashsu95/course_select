@@ -10,7 +10,9 @@ class TermAdmin(admin.ModelAdmin):
 
 @admin.register(Teacher)
 class TeacherAdmin(admin.ModelAdmin):
+    list_display = ["name", "email", "user"]
     search_fields = ["name"]
+    autocomplete_fields = ["user"]
 
 
 @admin.register(Course)

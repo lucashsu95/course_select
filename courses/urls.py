@@ -8,4 +8,6 @@ urlpatterns = [
     path("course/<int:pk>/drop/", views.drop, name="drop"),
     path("course/<int:pk>/comment/", views.add_comment, name="add_comment"),
     path("my/", views.my_schedule, name="my_schedule"),
+    path("teaching/", views.teaching_courses, name="teaching"),
+    path("course/<int:pk>/roster/", views.course_roster, name="course_roster"),
 ]
