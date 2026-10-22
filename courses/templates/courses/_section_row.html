@@ -23,6 +23,6 @@
     <span class="track" aria-hidden="true"><span style="width:{% widthratio s.enrolled s.capacity 100 %}%"></span></span>
   </div>
   <div class="action">
-    {% if user.is_authenticated %}{% include "courses/_action.html" with section=s is_mine=is_mine next=next %}{% endif %}
+    {% if user.is_authenticated %}{% include "courses/_action.html" with section=s is_mine=is_mine next=next window_state=window.state %}{% endif %}
   </div>
 </li>

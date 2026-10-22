@@ -4,8 +4,10 @@ from .models import Course, Enrollment, Section, Teacher, Term
 
 @admin.register(Term)
 class TermAdmin(admin.ModelAdmin):
-    list_display = ["code", "is_current"]
+    list_display = ["code", "is_current", "enroll_open", "enroll_close"]
     list_filter = ["is_current"]
+    date_hierarchy = "enroll_open"
+    fields = ["code", "is_current", "enroll_open", "enroll_close"]
 
 
 @admin.register(Teacher)

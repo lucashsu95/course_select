@@ -17,6 +17,8 @@
   --accent-ink: #6b1d3e;
   --primary: #1d1f20;
   --negative: #c4242a;
+  --warning: #9a6700;
+  --warning-soft: #fff7e0;
   --pill-negative-bg: #ffedea;
   --pill-negative-ink: #831c1e;
   --pill-positive-bg: #dcfae5;
@@ -496,3 +498,14 @@ h2 { font-size: var(--fs-section); font-weight: 600; }
 .roster th:last-child, .roster td:last-child { padding-right: 0; }
 .roster .right { text-align: right; }
 .roster-empty { padding: 20px 0; color: var(--muted); text-align: center; }
+
+/* 選課時間窗狀態列 */
+.term-window {
+  margin: 0 0 12px;
+  padding: 6px 12px;
+  border-radius: var(--radius-control);
+  font-size: 13.5px;
+}
+.term-window.tw-open { background: var(--pill-positive-bg); color: var(--pill-positive-ink); }
+.term-window.tw-not_open { background: var(--warning-soft); color: var(--warning); }
+.term-window.tw-closed { background: var(--pill-negative-bg); color: var(--pill-negative-ink); }

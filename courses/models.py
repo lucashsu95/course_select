@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 
 
 class Teacher(models.Model):
@@ -16,6 +17,8 @@ class Teacher(models.Model):
 class Term(models.Model):
     code = models.CharField("學期", max_length=20, unique=True)  # 例如 114-1
     is_current = models.BooleanField("當前學期", default=False)
+    enroll_open = models.DateTimeField("選課開放時間", null=True, blank=True)  # null = 不限
+    enroll_close = models.DateTimeField("選課截止時間", null=True, blank=True)
 
     class Meta:
         ordering = ["-code"]
@@ -27,6 +30,20 @@ class Term(models.Model):
     def current(cls):
         """選課與課表都以當前學期為準；沒有標記時取最新的。"""
         return cls.objects.filter(is_current=True).first() or cls.objects.first()
+
+    @property
+    def has_window(self):
+        return bool(self.enroll_open or self.enroll_close)
+
+    @property
+    def enrollment_state(self):
+        """選課階段：not_open / open / closed（兩欄皆空＝永遠 open）。"""
+        now = timezone.now()
+        if self.enroll_open and now < self.enroll_open:
+            return "not_open"
+        if self.enroll_close and now > self.enroll_close:
+            return "closed"
+        return "open"
 
 
 class Course(models.Model):

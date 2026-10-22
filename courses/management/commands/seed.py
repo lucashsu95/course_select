@@ -1,4 +1,8 @@
+from datetime import timedelta
+
 from django.core.management.base import BaseCommand
+from django.utils import timezone
+
 from courses.models import Course, Section, Teacher, Term
 
 # (課號, 課名, 老師, 學分, 大綱, [(班別, 星期, 起始, 結束, 教室, 名額), ...])
@@ -40,7 +44,12 @@ class Command(BaseCommand):
     help = "載入範例課程與班別（可重複執行）"
 
     def handle(self, *args, **opts):
-        term, _ = Term.objects.get_or_create(code="114-1", defaults={"is_current": True})
+        now = timezone.now()
+        term, _ = Term.objects.update_or_create(code="114-1", defaults={
+            "is_current": True,
+            "enroll_open": now - timedelta(days=1),    # 昨天開放
+            "enroll_close": now + timedelta(days=14),  # 兩週後截止 → 「加選中」
+        })
         for code, name, teacher, cr, syl, sections in DATA:
             t, _ = Teacher.objects.get_or_create(name=teacher)
             course, _ = Course.objects.update_or_create(term=term, code=code,
@@ -48,4 +57,10 @@ class Command(BaseCommand):
             for label, day, s, e, room, cap in sections:
                 Section.objects.update_or_create(course=course, label=label,
                                                   defaults=dict(day=day, start_period=s, end_period=e, room=room, capacity=cap))
-        self.stdout.write(f"已載入 {len(DATA)} 門課到 {term.code}")
+        self.stdout.write(f"已載入 {len(DATA)} 門課到 {term.code}（選課加選中）")
+        future, _ = Term.objects.update_or_create(code="114-2", defaults={
+            "is_current": False,
+            "enroll_open": now + timedelta(days=30),   # 尚未開放（admin 可演示）
+            "enroll_close": now + timedelta(days=44),
+        })
+        self.stdout.write(f"另建未來學期 {future.code}（選課未開放，供演示）")
