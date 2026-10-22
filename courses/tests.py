@@ -184,11 +184,12 @@ class TeacherRoleTests(CourseTestCase):
 
     def test_roster_link_only_for_teacher(self):
         detail = reverse("course_detail", args=[self.a.pk])
-        self.assertNotContains(self.client.get(detail), "選課名單")
+        roster = reverse("course_roster", args=[self.a.pk])
+        self.assertNotContains(self.client.get(detail), roster)
         self.client.force_login(self.student)
-        self.assertNotContains(self.client.get(detail), "選課名單")
+        self.assertNotContains(self.client.get(detail), roster)
         self.client.force_login(self.u)
-        self.assertContains(self.client.get(detail), reverse("course_roster", args=[self.a.pk]))
+        self.assertContains(self.client.get(detail), roster)
 
     def test_deleting_user_keeps_teacher(self):
         self.u.delete()

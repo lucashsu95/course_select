@@ -72,6 +72,7 @@ courses/management/commands/seed.py    範例學期與課程資料
 | --- | --- |
 | `config/settings.py` | `MAX_CREDITS = 25`：每學期學分上限 |
 | `.env` | `SECRET_KEY`、`DEBUG`、`ALLOWED_HOSTS`（上線時設 `DEBUG=0` 且填 `ALLOWED_HOSTS`） |
+| `.env` | `USE_NGROK=1` 與 `NGROK_ORIGIN=https://你的固定網域` 才啟用 ngrok 的 https 與 CSRF 設定，預設關閉 |
 
 ## 已知限制
 
