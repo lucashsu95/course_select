@@ -51,6 +51,10 @@ uv run --env-file .env manage.py runserver
 
 把某人變成老師：`/admin/courses/teacher/` → 選一筆 Teacher → 「登入帳號」選他的 Google 帳號 → 儲存。該帳號下次登入就會在側欄看到「我的課程」。沒綁定的人開 `/teaching/` 只會看到空頁面，直接輸入別人的名單網址會拿到 404。
 
+## 開發流程
+
+新功能貢獻流程（分支、PR、合併前檢查、業務規則文件同步、commit 格式）見 [`CONTRIBUTING.md`](CONTRIBUTING.md)。
+
 ## 測試
 
 ```bash
