@@ -13,6 +13,7 @@
     {% if user.is_authenticated and is_teacher %}<a class="btn btn-secondary" href="{% url 'course_roster' course.pk %}">選課名單</a>{% endif %}
   </div>
 </div>
+{% if window %}<p class="term-window tw-{{ window.state }}">{{ window.text }}</p>{% endif %}
 
 <section class="panel">
   <h2>班別（選一班加選）</h2>

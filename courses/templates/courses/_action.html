@@ -3,8 +3,10 @@
   <form method="post" action="{% url 'drop' section.pk %}" class="inline-form">{% csrf_token %}
     <input type="hidden" name="next" value="{{ next }}">
     <button class="btn btn-secondary">退選</button></form>
-{% else %}
+{% elif window_state == "" or window_state == "open" %}
   <form method="post" action="{% url 'enroll' section.pk %}" class="inline-form">{% csrf_token %}
     <input type="hidden" name="next" value="{{ next }}">
     <button class="btn {% if primary %}btn-primary{% else %}btn-secondary{% endif %}">加選</button></form>
+{% else %}
+  <button class="btn btn-secondary" disabled>{% if window_state == "not_open" %}未開放{% else %}已截止{% endif %}</button>
 {% endif %}

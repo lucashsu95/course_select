@@ -24,6 +24,20 @@ def _redirect_next(request, fallback, *args):
     return redirect(fallback, *args)
 
 
+def _window_context(term):
+    """選課時間窗狀態列；兩欄皆空（不限）回 None，頁面不顯示。"""
+    if not term.has_window:
+        return None
+    state = term.enrollment_state
+    if state == "not_open":
+        text = f"選課 {term.enroll_open:%Y/%m/%d %H:%M} 開放"
+    elif state == "closed":
+        text = f"選課已截止（{term.enroll_close:%Y/%m/%d %H:%M} 截止），已加選者仍可退選"
+    else:
+        text = "加選中"
+    return {"state": state, "text": text}
+
+
 def course_list(request):
     """課程列表：每行是一個班別。"""
     q = request.GET.get("q", "").strip()
@@ -44,6 +58,7 @@ def course_list(request):
     full_count = sum(1 for s in sections if s.is_full)
     return render(request, "courses/list.html", {
         "sections": sections, "q": q, "day": day, "days": Section.DAYS, "full_count": full_count,
+        "window": _window_context(term),
     })
 
 
@@ -60,6 +75,7 @@ def course_detail(request, pk):
                    .select_related("teacher")[:4])
     return render(request, "courses/detail.html", {
         "course": course, "sections": sections, "my_section": my_section, "is_teacher": is_teacher, "related": related,
+        "window": _window_context(course.term),
     })
 
 
@@ -72,6 +88,8 @@ def enroll(request, pk):
         messages.success(request, result.message)
     elif result.code == "already":
         messages.info(request, result.message)
+    elif result.code in ("not_open", "closed"):
+        messages.warning(request, result.message)
     else:
         messages.error(request, result.message)
     return _redirect_next(request, "course_detail", section.course_id)

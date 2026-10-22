@@ -7,6 +7,7 @@
     <p class="sub">共 <span class="num">{{ sections|length }}</span> 個班別{% if full_count %}，<span class="num">{{ full_count }}</span> 班已額滿{% endif %}</p>
   </div>
 </div>
+{% if window %}<p class="term-window tw-{{ window.state }}">{{ window.text }}</p>{% endif %}
 
 <form class="filters" method="get" role="search">
   <input type="search" name="q" value="{{ q }}" placeholder="課名、課號或老師" aria-label="搜尋課程">
