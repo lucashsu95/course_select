@@ -1,13 +1,13 @@
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db import transaction
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
-from .models import Course, Enrollment
+from .models import Course, Enrollment, Term
+from .services import register
 
 
 def _my_course_ids(user):
@@ -27,7 +27,8 @@ def _redirect_next(request, fallback, *args):
 def course_list(request):
     q = request.GET.get("q", "").strip()
     day = request.GET.get("day", "")
-    courses = Course.objects.select_related("teacher").annotate(enrolled=Count("enrollment"))
+    term = Term.current()
+    courses = Course.objects.filter(term=term).select_related("teacher").annotate(enrolled=Count("enrollment"))
     if q:
         courses = courses.filter(Q(name__icontains=q) | Q(code__icontains=q) | Q(teacher__name__icontains=q))
     if day.isdigit():
@@ -44,30 +45,28 @@ def course_list(request):
 
 def course_detail(request, pk):
     course = get_object_or_404(Course.objects.select_related("teacher").annotate(enrolled=Count("enrollment")), pk=pk)
+    mine = _my_course_ids(request.user)
+    related = list(Course.objects.filter(teacher=course.teacher, term=course.term).exclude(pk=pk)
+                   .select_related("teacher").annotate(enrolled=Count("enrollment"))[:4])
+    for c in related:
+        c.is_mine = c.pk in mine
     return render(request, "courses/detail.html", {
-        "course": course, "is_mine": course.pk in _my_course_ids(request.user),
+        "course": course, "is_mine": course.pk in mine, "related": related,
+        "days": Course.DAYS,
     })
 
 
 @login_required
 @require_POST
 def enroll(request, pk):
-    with transaction.atomic():
-        # shortcut: sqlite 不支援列鎖，名額在高併發下可能超收；換 PostgreSQL 時 select_for_update 才會生效
-        course = get_object_or_404(Course.objects.select_for_update(), pk=pk)
-        mine = list(Course.objects.filter(enrollment__user=request.user))
-        total = sum(c.credits for c in mine) + course.credits
-        if course in mine:
-            messages.info(request, "你已經加選過這門課了。")
-        elif (clash := next((c for c in mine if c.conflicts_with(course)), None)):
-            messages.error(request, f"衝堂：和「{clash.name}」時間重疊。")
-        elif course.is_full:
-            messages.error(request, "名額已滿。")
-        elif total > settings.MAX_CREDITS:
-            messages.error(request, f"超過學分上限 {settings.MAX_CREDITS}。")
-        else:
-            Enrollment.objects.create(user=request.user, course=course)
-            messages.success(request, f"已加選「{course.name}」。")
+    course = get_object_or_404(Course, pk=pk)
+    result = register(request.user, course)
+    if result.ok:
+        messages.success(request, result.message)
+    elif result.code == "already":
+        messages.info(request, result.message)
+    else:
+        messages.error(request, result.message)
     return _redirect_next(request, "course_detail", pk)
 
 
@@ -84,10 +83,13 @@ def drop(request, pk):
 
 @login_required
 def my_schedule(request):
-    mine = list(Course.objects.filter(enrollment__user=request.user).select_related("teacher"))
+    mine = list(Course.objects.filter(enrollment__user=request.user, term=Term.current())
+                .select_related("teacher").annotate(enrolled=Count("enrollment")))
     grid = {(c.day, p): c for c in mine for p in range(c.start_period, c.end_period + 1)}
-    last_period = max((c.end_period for c in mine), default=10)
+    last_period = max(8, max((c.end_period for c in mine), default=8))
     rows = [(p, [grid.get((d, p)) for d, _ in Course.DAYS]) for p in range(1, last_period + 1)]
+    for c in mine:
+        c.is_mine = True
     return render(request, "courses/schedule.html", {
         "mine": mine, "rows": rows, "days": [label for _, label in Course.DAYS],
         "total": sum(c.credits for c in mine), "max": settings.MAX_CREDITS,

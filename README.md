@@ -48,8 +48,8 @@ uv run manage.py test
 
 ```
 config/     settings、根路由（/admin/、/accounts/、courses）
-courses/    models（Teacher / Course / Enrollment）、views、urls、templates、static
-courses/management/commands/seed.py    範例課程資料
+courses/    models（Term / Teacher / Course / Enrollment）、services、views、urls、templates、static
+courses/management/commands/seed.py    範例學期與課程資料
 ```
 
 ## 可調設定

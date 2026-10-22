@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand
-from courses.models import Course, Teacher
+from courses.models import Course, Teacher, Term
 
 DATA = [
     ("CS101", "程式設計", "王大明", 3, 1, 1, 3, "A101", "變數、流程控制、函式、基礎資料結構。\n評分：作業 40%、期中 30%、期末 30%"),
@@ -19,8 +19,9 @@ class Command(BaseCommand):
     help = "載入範例課程（可重複執行）"
 
     def handle(self, *args, **opts):
+        term, _ = Term.objects.get_or_create(code="114-1", defaults={"is_current": True})
         for code, name, teacher, cr, day, s, e, room, syl in DATA:
             t, _ = Teacher.objects.get_or_create(name=teacher)
-            Course.objects.update_or_create(code=code, defaults=dict(
+            Course.objects.update_or_create(term=term, code=code, defaults=dict(
                 name=name, teacher=t, credits=cr, day=day, start_period=s, end_period=e, room=room, syllabus=syl))
-        self.stdout.write(f"已載入 {len(DATA)} 門課")
+        self.stdout.write(f"已載入 {len(DATA)} 門課到 {term.code}")

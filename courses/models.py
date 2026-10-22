@@ -11,10 +11,27 @@ class Teacher(models.Model):
         return self.name
 
 
+class Term(models.Model):
+    code = models.CharField("學期", max_length=20, unique=True)  # 例如 114-1
+    is_current = models.BooleanField("當前學期", default=False)
+
+    class Meta:
+        ordering = ["-code"]
+
+    def __str__(self):
+        return self.code
+
+    @classmethod
+    def current(cls):
+        """選課與課表都以當前學期為準；沒有標記時取最新的。"""
+        return cls.objects.filter(is_current=True).first() or cls.objects.first()
+
+
 class Course(models.Model):
     DAYS = [(1, "週一"), (2, "週二"), (3, "週三"), (4, "週四"), (5, "週五")]
 
-    code = models.CharField("課號", max_length=20, unique=True)
+    term = models.ForeignKey(Term, on_delete=models.PROTECT, related_name="courses", verbose_name="學期")
+    code = models.CharField("課號", max_length=20)
     name = models.CharField("課名", max_length=100)
     teacher = models.ForeignKey(Teacher, on_delete=models.PROTECT, verbose_name="老師")
     credits = models.PositiveSmallIntegerField("學分", default=3)
@@ -28,6 +45,7 @@ class Course(models.Model):
     class Meta:
         ordering = ["code"]
         constraints = [
+            models.UniqueConstraint(fields=["term", "code"], name="course_code_per_term"),
             models.CheckConstraint(
                 condition=models.Q(start_period__gte=1) & models.Q(end_period__gte=models.F("start_period")),
                 name="course_periods_valid",
@@ -69,6 +87,7 @@ class Enrollment(models.Model):
     created = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        # 同一門課在新學期是一筆新的 Course，所以 (user, course) 已經等於 (user, course, term)
         constraints = [models.UniqueConstraint(fields=["user", "course"], name="one_per_course")]
 
     def __str__(self):
