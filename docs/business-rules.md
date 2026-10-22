@@ -108,7 +108,8 @@
 
 ## 9. 先修課程檢查
 
-- `Course.prerequisites` 是到自己（非對稱）的 M2M，最多 2 門（admin 表單 `clean()` 把關）。
+- `Course.prerequisites` 是到自己（非對稱）的 M2M，最多 2 門（admin 表單 `CourseAdminForm.clean_prerequisites()` 把關）。
+  - 上限只在 admin 表單檢查；直接寫 model（`shell`、資料匯入）不受此限。
 - **「已修」的定義**：使用者在**過去學期**（`is_current=False` 的 Term）有**同課號**的加選紀錄。
   - 同一學期的加選不算「修過」（本學期選了 CS201 不構成 CS301 的先修）。
   - 以課號比對：跨學期同一門課（113-2 的 CS201 與 114-1 的 CS201）視為同一門。
