@@ -330,6 +330,7 @@ h2 { font-size: var(--fs-section); font-weight: 600; }
 /* detail */
 .detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
 .detail-head .btn { height: 36px; padding: 0 20px; font-size: 14px; }
+.detail-head .action { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .detail-grid {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
@@ -365,7 +366,7 @@ h2 { font-size: var(--fs-section); font-weight: 600; }
 
 .login-hint { color: var(--muted); font-size: 13px; }
 .login-hint a { color: var(--accent-ink); }
-.detail-head .action .inline-form { width: 100%; }
+.detail-head .action .inline-form { width: auto; }
 
 .related { margin-top: 56px; }
 .related h2 { margin-bottom: 4px; }
@@ -515,7 +516,7 @@ h2 { font-size: var(--fs-section); font-weight: 600; }
   .filters .btn { grid-column: 1 / -1; height: 44px; }
 
   .detail-head { gap: 16px; }
-  .detail-head .action { width: 100%; }
+  .detail-head .action { width: 100%; align-items: stretch; }
   .detail-head .action .btn { width: 100%; height: 44px; }
   .detail-grid { margin-top: 28px; }
   .syllabus p { font-size: 15px; }
@@ -528,7 +529,8 @@ h2 { font-size: var(--fs-section); font-weight: 600; }
 }
 
 /* 選課名單 */
-.roster { width: 100%; border-collapse: collapse; font-size: 14px; }
+.roster-wrap { overflow-x: auto; }
+.roster { width: 100%; min-width: 520px; border-collapse: collapse; font-size: 14px; }
 .roster th { padding: 0 12px 10px; color: var(--muted); font-size: 12px; font-weight: 500; text-align: left; }
 .roster td { padding: 12px; border-top: 1px solid var(--rule); }
 .roster th:first-child, .roster td:first-child { padding-left: 0; }

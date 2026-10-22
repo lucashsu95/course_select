@@ -9,21 +9,24 @@
 </div>
 
 <div class="panel">
-  <table class="roster">
-    <thead>
-      <tr><th scope="col">姓名</th><th scope="col">信箱</th><th scope="col" class="right">加選時間</th></tr>
-    </thead>
-    <tbody>
-      {% for e in enrollments %}
-      <tr>
-        <td>{{ e.user.first_name|default:e.user.username }}</td>
-        <td>{{ e.user.email|default:"—" }}</td>
-        <td class="right num">{{ e.created|date:"Y-m-d H:i" }}</td>
-      </tr>
-      {% empty %}
-      <tr><td colspan="3" class="roster-empty">還沒有人選這門課。</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="roster-wrap">
+    <table class="roster">
+      <thead>
+        <tr><th scope="col">姓名</th><th scope="col">信箱</th><th scope="col" class="right">加選時間</th></tr>
+      </thead>
+      <tbody>
+        {% for e in enrollments %}
+        <tr>
+          <td>{{ e.user.first_name|default:e.user.username }}</td>
+          <td>{{ e.user.email|default:"—" }}</td>
+          <td class="right num">{{ e.created|date:"Y-m-d H:i" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3" class="roster-empty">還沒有人選這門課。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="scroll-hint">左右滑動看完整名單。</p>
 </div>
 {% endblock %}
