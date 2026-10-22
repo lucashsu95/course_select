@@ -17,6 +17,15 @@ def _my_section_ids(user):
     return set(Enrollment.objects.filter(user=user).values_list("section_id", flat=True))
 
 
+def _completed_codes(user):
+    """過去學期有過加選紀錄的課號集合（＝「修過」）。"""
+    if not user.is_authenticated:
+        return set()
+    return set(Enrollment.objects.filter(
+        user=user, section__course__term__is_current=False)
+        .values_list("section__course__code", flat=True))
+
+
 def _redirect_next(request, fallback, *args):
     """表單帶的 next 只接受同一站台的網址，避免變成開放轉址。"""
     nxt = request.POST.get("next", "")
@@ -51,28 +60,39 @@ def course_list(request):
     """課程列表：每行是一個班別。"""
     q = request.GET.get("q", "").strip()
     day = request.GET.get("day", "")
+    slot = request.GET.get("slot", "")
     term = Term.current()
     sections = (Section.objects.filter(course__term=term)
                 .select_related("course__teacher")
+                .prefetch_related("course__prerequisites")
                 .annotate(enrolled=Count("enrollments", distinct=True),
                           waitlist_count=Count("waitlists", distinct=True,
-                                               filter=Q(waitlists__promoted_at__isnull=True))))
+                                                filter=Q(waitlists__promoted_at__isnull=True))))
     if q:
         sections = sections.filter(Q(course__name__icontains=q) | Q(course__code__icontains=q)
                                    | Q(course__teacher__name__icontains=q))
     if day.isdigit():
         sections = sections.filter(day=int(day))
+    if slot in Section.PERIOD_SLOT_RANGES:
+        lo, hi = Section.PERIOD_SLOT_RANGES[slot]
+        sections = sections.filter(start_period__gte=lo)
+        if hi:
+            sections = sections.filter(start_period__lte=hi)
     mine = _my_section_ids(request.user)
     waiting = _wait_positions(request.user)
+    completed = _completed_codes(request.user)
     sections = list(sections)
     for s in sections:
         s.is_mine = s.pk in mine
         s.is_waiting = s.pk in waiting
         s.wait_position = waiting.get(s.pk)
+        s.prereq_list = [(c, c.code in completed) for c in sorted(s.course.prerequisites.all(), key=lambda c: c.code)]
     full_count = sum(1 for s in sections if s.is_full)
     return render(request, "courses/list.html", {
-        "sections": sections, "q": q, "day": day, "days": Section.DAYS, "full_count": full_count,
+        "sections": sections, "q": q, "day": day, "slot": slot,
+        "days": Section.DAYS, "slots": Section.PERIOD_SLOTS, "full_count": full_count,
         "window": _window_context(term),
+        "show_prereq_marks": request.user.is_authenticated,
     })
 
 
@@ -93,9 +113,12 @@ def course_detail(request, pk):
     is_teacher = request.user.is_authenticated and course.teacher.user_id == request.user.id
     related = list(Course.objects.filter(teacher=course.teacher, term=course.term).exclude(pk=pk)
                    .select_related("teacher")[:4])
+    completed = _completed_codes(request.user)
+    prereqs = [(c, c.code in completed) for c in sorted(course.prerequisites.all(), key=lambda c: c.code)]
     return render(request, "courses/detail.html", {
         "course": course, "sections": sections, "my_section": my_section, "is_teacher": is_teacher, "related": related,
         "window": _window_context(course.term),
+        "prereqs": prereqs, "show_prereq_marks": request.user.is_authenticated,
     })
 
 

@@ -53,6 +53,9 @@ class Course(models.Model):
     teacher = models.ForeignKey(Teacher, on_delete=models.PROTECT, verbose_name="老師")
     credits = models.PositiveSmallIntegerField("學分", default=3)
     syllabus = models.TextField("課程大綱", blank=True)
+    prerequisites = models.ManyToManyField(
+        "self", symmetrical=False, related_name="dependent_courses",
+        blank=True, verbose_name="先修課程")  # 1–2 門，admin 表單 clean_prerequisites() 把關
 
     class Meta:
         ordering = ["code"]
@@ -68,6 +71,9 @@ class Section(models.Model):
     """課程的一個班別：有自己的時間、教室、名額。學生加選的對象是班別，不是課程。"""
 
     DAYS = [(1, "週一"), (2, "週二"), (3, "週三"), (4, "週四"), (5, "週五")]
+    # 課程列表的時段篩選：以班別 start_period 為準
+    PERIOD_SLOTS = [("am", "上午(1-3)"), ("midday", "中午(4-6)"), ("pm", "下午(7-9)"), ("evening", "晚上(10+)")]
+    PERIOD_SLOT_RANGES = {"am": (1, 3), "midday": (4, 6), "pm": (7, 9), "evening": (10, None)}
 
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="sections", verbose_name="課程")
     label = models.CharField("班別", max_length=10)  # 例如 A / B / C

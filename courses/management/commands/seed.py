@@ -70,3 +70,23 @@ class Command(BaseCommand):
             "enroll_close": now + timedelta(days=44),
         })
         self.stdout.write(f"另建未來學期 {future.code}（選課未開放，供演示）")
+
+        # 過去學期＋先修鏈＋演示帳號：demo 在 113-2 修過 CS201
+        past, _ = Term.objects.update_or_create(code="113-2", defaults={"is_current": False})
+        teacher_wd, _ = Teacher.objects.get_or_create(name="王大明")
+        past_cs201, _ = Course.objects.update_or_create(term=past, code="CS201",
+                                                        defaults=dict(name="資料結構", teacher=teacher_wd,
+                                                                      credits=3, syllabus="（113-2 舊課，供先修示範）"))
+        past_sec, _ = Section.objects.update_or_create(course=past_cs201, label="A",
+                                                       defaults=dict(day=2, start_period=2, end_period=4,
+                                                                     room="A102", capacity=40))
+        user_model = get_user_model()
+        demo, _ = user_model.objects.get_or_create(username="demo", defaults={"email": "demo@example.com"})
+        if not demo.check_password("demo1234"):
+            demo.set_password("demo1234")
+            demo.save()
+        Enrollment.objects.get_or_create(user=demo, section=past_sec)
+        Course.objects.get(term=term, code="CS301").prerequisites.set([past_cs201])
+        Course.objects.get(term=term, code="CS401").prerequisites.set(
+            [Course.objects.get(term=term, code="CS301")])
+        self.stdout.write("先修示範：demo（密碼 demo1234）113-2 修過 CS201 → CS301 可選、CS401 被擋")

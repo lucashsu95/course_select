@@ -522,3 +522,7 @@ h2 { font-size: var(--fs-section); font-weight: 600; }
 .term-window.tw-open { background: var(--pill-positive-bg); color: var(--pill-positive-ink); }
 .term-window.tw-not_open { background: var(--warning-soft); color: var(--warning); }
 .term-window.tw-closed { background: var(--pill-negative-bg); color: var(--pill-negative-ink); }
+
+/* 先修課程標示 */
+.c-prereq { color: var(--muted); }
+.prereq-missing { color: var(--negative); }
