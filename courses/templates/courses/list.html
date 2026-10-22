@@ -1,0 +1,48 @@
+{% extends "courses/base.html" %}
+{% block title %}搜尋課程{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>搜尋課程</h1>
+    <p class="sub">共 <span class="num">{{ courses|length }}</span> 門課{% if full_count %}，<span class="num">{{ full_count }}</span> 門已額滿{% endif %}</p>
+  </div>
+</div>
+
+<form class="filters" method="get" role="search">
+  <input type="search" name="q" value="{{ q }}" placeholder="課名、課號或老師" aria-label="搜尋課程">
+  <select name="day" aria-label="星期">
+    <option value="">全部星期</option>
+    {% for v, label in days %}<option value="{{ v }}" {% if day == v|stringformat:"s" %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  <button class="btn btn-primary">搜尋</button>
+</form>
+
+<div class="list-head" aria-hidden="true">
+  <span>課程</span><span>課號</span><span>時間</span><span class="right">學分</span><span class="right">名額</span><span></span>
+</div>
+<ul class="courses">
+  {% for course in courses %}
+  <li class="course-row">
+    <div class="identity">
+      <a class="course-name" href="{% url 'course_detail' course.pk %}">{{ course.name }}</a>
+      <p class="course-meta">{{ course.teacher }}</p>
+    </div>
+    <div class="meta">
+      <span class="c-code">{{ course.code }}<span class="room">· {{ course.room|default:"教室未定" }}</span></span>
+      <span class="c-time">{{ course.time_display }}</span>
+      <span class="c-credits num">{{ course.credits }} 學分</span>
+    </div>
+    <div class="seats">
+      <span class="seats-num num">{{ course.enrolled }}<span class="of"> / {{ course.capacity }}</span></span>
+      {% if course.enrolled >= course.capacity %}<span class="full-flag">額滿</span>{% endif %}
+      <span class="track" aria-hidden="true"><span style="width:{% widthratio course.enrolled course.capacity 100 %}%"></span></span>
+    </div>
+    <div class="action">
+      {% if user.is_authenticated %}{% include "courses/_action.html" with is_mine=course.is_mine next=request.get_full_path %}{% endif %}
+    </div>
+  </li>
+  {% empty %}
+  <li class="empty">找不到符合的課程。{% if q or day %}<a href="{% url 'course_list' %}">清除篩選</a>{% endif %}</li>
+  {% endfor %}
+</ul>
+{% endblock %}

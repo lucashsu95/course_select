@@ -1,0 +1,54 @@
+{% extends "courses/base.html" %}
+{% block title %}我的課表{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>我的課表</h1>
+    <p class="sub"><span class="num">{{ total }}</span> / <span class="num">{{ max }}</span> 學分 · <span class="num">{{ mine|length }}</span> 門課</p>
+  </div>
+</div>
+
+<div class="panel week-wrap">
+  <table class="week" aria-label="週課表">
+    <thead>
+      <tr><th scope="col"><span aria-hidden="true">節</span><span class="sr-only">節次</span></th>{% for d in days %}<th scope="col">{{ d }}</th>{% endfor %}</tr>
+    </thead>
+    <tbody>
+      {% for p, cells in rows %}
+      <tr>
+        <th scope="row">{{ p }}</th>
+        {% for c in cells %}
+          {% if c %}
+            {% if c.start_period == p %}
+            <td rowspan="{{ c.periods }}"><a class="slot" href="{% url 'course_detail' c.pk %}">
+              <span class="slot-name">{{ c.name }}</span>
+              <span class="slot-meta">{{ c.room|default:"教室未定" }} · {{ c.teacher }}</span>
+            </a></td>
+            {% endif %}
+          {% else %}
+            <td></td>
+          {% endif %}
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<section class="mine">
+  <div class="mine-head"><h2>已選課程</h2><span class="num">{{ mine|length }} 門</span></div>
+  <ul class="courses courses--mine">
+    {% for course in mine %}
+    <li class="course-row">
+      <div class="identity">
+        <a class="course-name" href="{% url 'course_detail' course.pk %}">{{ course.name }}</a>
+        <p class="course-meta">{{ course.code }} · {{ course.teacher }} · {{ course.time_display }} · {{ course.room|default:"教室未定" }} · {{ course.credits }} 學分</p>
+      </div>
+      <div class="action">{% include "courses/_action.html" with is_mine=True next=request.path %}</div>
+    </li>
+    {% empty %}
+    <li class="empty">還沒有選課，去 <a href="{% url 'course_list' %}">搜尋課程</a> 看看吧。</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}

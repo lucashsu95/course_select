@@ -1,0 +1,60 @@
+{% load static %}
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}搜尋課程{% endblock %} · 選課系統</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'courses/app.css' %}">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="{% url 'course_list' %}">
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
+        <rect width="26" height="26" rx="7" fill="var(--accent-soft)"/>
+        <rect x="6" y="7" width="4" height="4" rx="1" fill="var(--accent)"/>
+        <rect x="11" y="7" width="4" height="4" rx="1" fill="var(--accent-track)"/>
+        <rect x="16" y="7" width="4" height="4" rx="1" fill="var(--accent-track)"/>
+        <rect x="6" y="12" width="4" height="4" rx="1" fill="var(--accent-track)"/>
+        <rect x="11" y="12" width="4" height="4" rx="1" fill="var(--accent)"/>
+        <rect x="16" y="12" width="4" height="4" rx="1" fill="var(--accent-track)"/>
+        <rect x="6" y="17" width="4" height="4" rx="1" fill="var(--accent-track)"/>
+        <rect x="11" y="17" width="4" height="4" rx="1" fill="var(--accent-track)"/>
+        <rect x="16" y="17" width="4" height="4" rx="1" fill="var(--accent)"/>
+      </svg>
+      選課系統</a>
+    {% include "courses/_nav.html" %}
+  </aside>
+
+  <header class="topbar">
+    <a class="brand" href="{% url 'course_list' %}">
+      <svg width="24" height="24" viewBox="0 0 26 26" aria-hidden="true">
+        <rect width="26" height="26" rx="7" fill="var(--accent-soft)"/>
+        <rect x="6" y="7" width="4" height="4" rx="1" fill="var(--accent)"/>
+        <rect x="11" y="7" width="4" height="4" rx="1" fill="var(--accent-track)"/>
+        <rect x="16" y="7" width="4" height="4" rx="1" fill="var(--accent-track)"/>
+        <rect x="6" y="12" width="4" height="4" rx="1" fill="var(--accent-track)"/>
+        <rect x="11" y="12" width="4" height="4" rx="1" fill="var(--accent)"/>
+        <rect x="16" y="12" width="4" height="4" rx="1" fill="var(--accent-track)"/>
+        <rect x="6" y="17" width="4" height="4" rx="1" fill="var(--accent-track)"/>
+        <rect x="11" y="17" width="4" height="4" rx="1" fill="var(--accent-track)"/>
+        <rect x="16" y="17" width="4" height="4" rx="1" fill="var(--accent)"/>
+      </svg>
+      選課系統</a>
+    <details class="menu">
+      <summary>選單</summary>
+      {% include "courses/_nav.html" %}
+    </details>
+  </header>
+
+  <main class="canvas">
+    {% for m in messages %}<div class="notice notice-{{ m.tags }}" role="status">{{ m }}</div>{% endfor %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+</body>
+</html>

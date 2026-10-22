@@ -1,0 +1,42 @@
+{% extends "courses/base.html" %}
+{% block title %}{{ course.name }}{% endblock %}
+{% block content %}
+<div class="detail-head">
+  <div>
+    <h1>{{ course.name }}</h1>
+    <p class="sub">{{ course.code }} · {{ course.teacher }} · {{ course.time_display }} · {{ course.room|default:"教室未定" }}</p>
+  </div>
+  <div class="action">
+    {% if user.is_authenticated %}
+      {% include "courses/_action.html" with is_mine=is_mine primary=1 %}
+    {% else %}
+      <p class="login-hint">登入後才能加選 · <a href="{% url 'google_login' %}">以 Google 登入</a></p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="detail-grid">
+  <section class="syllabus">
+    <h2>課程大綱</h2>
+    <p>{{ course.syllabus|linebreaksbr|default:"尚無大綱。" }}</p>
+  </section>
+
+  <aside class="panel facts">
+    <h2>課程資訊</h2>
+    <dl>
+      <dt>學分</dt><dd><span class="num">{{ course.credits }}</span> 學分</dd>
+      <dt>時間</dt><dd>{{ course.time_display }}</dd>
+      <dt>教室</dt><dd>{{ course.room|default:"未定" }}</dd>
+      <dt>老師</dt><dd>{{ course.teacher }}{% if course.teacher.email %}<br><span class="course-meta">{{ course.teacher.email }}</span>{% endif %}</dd>
+      <dt>名額</dt>
+      <dd>
+        <div class="seats">
+          <span class="seats-num num">{{ course.enrolled }}<span class="of"> / {{ course.capacity }}</span></span>
+          {% if course.enrolled >= course.capacity %}<span class="full-flag">額滿</span>{% endif %}
+          <span class="track" aria-hidden="true"><span style="width:{% widthratio course.enrolled course.capacity 100 %}%"></span></span>
+        </div>
+      </dd>
+    </dl>
+  </aside>
+</div>
+{% endblock %}

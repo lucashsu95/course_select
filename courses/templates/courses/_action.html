@@ -1,0 +1,10 @@
+{# 加選 / 退選按鈕：需要 course、is_mine、next(可選)、primary(可選) #}
+{% if is_mine %}
+  <form method="post" action="{% url 'drop' course.pk %}" class="inline-form">{% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <button class="btn btn-secondary">退選</button></form>
+{% else %}
+  <form method="post" action="{% url 'enroll' course.pk %}" class="inline-form">{% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <button class="btn {% if primary %}btn-primary{% else %}btn-secondary{% endif %}">加選</button></form>
+{% endif %}

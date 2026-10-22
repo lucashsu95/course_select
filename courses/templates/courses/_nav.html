@@ -1,0 +1,31 @@
+{% load static %}
+{# 側邊欄 / 手機選單共用的導覽與帳號區 #}
+<nav class="nav" aria-label="主要">
+  <a href="{% url 'course_list' %}"{% if request.resolver_match.url_name == 'course_list' or request.resolver_match.url_name == 'course_detail' %} class="active" aria-current="page"{% endif %}>
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="7" cy="7" r="4.25"/><path d="m10.2 10.2 3 3"/></svg>
+    搜尋課程</a>
+  <a href="{% url 'my_schedule' %}"{% if request.resolver_match.url_name == 'my_schedule' %} class="active" aria-current="page"{% endif %}>
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="2"/><path d="M2 6.5h12M6 3v11M10 3v11"/></svg>
+    我的課表</a>
+  {% if user.is_staff %}
+  <a href="{% url 'admin:index' %}">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="5.5" cy="4" r="1.5" fill="currentColor" stroke="none"/><circle cx="10.5" cy="8" r="1.5" fill="currentColor" stroke="none"/><circle cx="5.5" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>
+    管理後台</a>
+  {% endif %}
+</nav>
+<div class="sidebar-foot">
+  {% if user.is_authenticated %}
+    <div class="who">
+      <span class="avatar" aria-hidden="true">{{ user.first_name|default:user.username|slice:":1" }}</span>
+      <span class="who-text">
+        <span class="who-name">{{ user.first_name|default:user.username }}</span>
+        <span class="who-meta">已登入</span>
+      </span>
+    </div>
+    <form method="post" action="{% url 'account_logout' %}" class="inline-form">{% csrf_token %}
+      <button class="btn btn-secondary">登出</button></form>
+  {% else %}
+    <p class="who-meta">登入後才能加選課程。</p>
+    <a class="btn btn-secondary" href="{% url 'google_login' %}">以 Google 登入</a>
+  {% endif %}
+</div>

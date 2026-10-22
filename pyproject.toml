@@ -1,0 +1,10 @@
+[project]
+name = "course-select"
+version = "0.1.0"
+description = "選課系統"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "django>=5.1",
+    "django-allauth[socialaccount]>=65",
+]
