@@ -30,27 +30,43 @@ class Term(models.Model):
 
 
 class Course(models.Model):
-    DAYS = [(1, "週一"), (2, "週二"), (3, "週三"), (4, "週四"), (5, "週五")]
-
     term = models.ForeignKey(Term, on_delete=models.PROTECT, related_name="courses", verbose_name="學期")
     code = models.CharField("課號", max_length=20)
     name = models.CharField("課名", max_length=100)
     teacher = models.ForeignKey(Teacher, on_delete=models.PROTECT, verbose_name="老師")
     credits = models.PositiveSmallIntegerField("學分", default=3)
-    day = models.PositiveSmallIntegerField("星期", choices=DAYS)
-    start_period = models.PositiveSmallIntegerField("起始節次")
-    end_period = models.PositiveSmallIntegerField("結束節次")
-    room = models.CharField("教室", max_length=30, blank=True)
-    capacity = models.PositiveSmallIntegerField("名額", default=40)
     syllabus = models.TextField("課程大綱", blank=True)
 
     class Meta:
         ordering = ["code"]
         constraints = [
             models.UniqueConstraint(fields=["term", "code"], name="course_code_per_term"),
+        ]
+
+    def __str__(self):
+        return f"{self.code} {self.name}"
+
+
+class Section(models.Model):
+    """課程的一個班別：有自己的時間、教室、名額。學生加選的對象是班別，不是課程。"""
+
+    DAYS = [(1, "週一"), (2, "週二"), (3, "週三"), (4, "週四"), (5, "週五")]
+
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="sections", verbose_name="課程")
+    label = models.CharField("班別", max_length=10)  # 例如 A / B / C
+    day = models.PositiveSmallIntegerField("星期", choices=DAYS)
+    start_period = models.PositiveSmallIntegerField("起始節次")
+    end_period = models.PositiveSmallIntegerField("結束節次")
+    room = models.CharField("教室", max_length=30, blank=True)
+    capacity = models.PositiveSmallIntegerField("名額", default=40)
+
+    class Meta:
+        ordering = ["course__code", "label"]
+        constraints = [
+            models.UniqueConstraint(fields=["course", "label"], name="section_label_per_course"),
             models.CheckConstraint(
                 condition=models.Q(start_period__gte=1) & models.Q(end_period__gte=models.F("start_period")),
-                name="course_periods_valid",
+                name="section_periods_valid",
             ),
         ]
 
@@ -59,7 +75,7 @@ class Course(models.Model):
             raise ValidationError({"end_period": "結束節次不可早於起始節次。"})
 
     def __str__(self):
-        return f"{self.code} {self.name}"
+        return f"{self.course} {self.label}班"
 
     @property
     def time_display(self):
@@ -68,6 +84,10 @@ class Course(models.Model):
     @property
     def periods(self):
         return self.end_period - self.start_period + 1
+
+    @property
+    def label_display(self):
+        return f"{self.label} 班"
 
     @property
     def enrolled_count(self):
@@ -79,18 +99,19 @@ class Course(models.Model):
         return self.enrolled_count >= self.capacity
 
     def conflicts_with(self, other):
+        """兩個班別的時段是否重疊（同一天的節次範圍相交）。"""
         return (self.day == other.day and self.start_period <= other.end_period
                 and other.start_period <= self.end_period)
 
 
 class Enrollment(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    course = models.ForeignKey(Course, on_delete=models.CASCADE)
+    section = models.ForeignKey(Section, on_delete=models.CASCADE, related_name="enrollments", verbose_name="班別")
     created = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        # 同一門課在新學期是一筆新的 Course，所以 (user, course) 已經等於 (user, course, term)
-        constraints = [models.UniqueConstraint(fields=["user", "course"], name="one_per_course")]
+        # 同一班別只選一次；一門課可以有幾個班別，但加選規則只允許進一班（見 services.register）
+        constraints = [models.UniqueConstraint(fields=["user", "section"], name="one_per_section")]
 
     def __str__(self):
-        return f"{self.user} - {self.course}"
+        return f"{self.user} - {self.section}"
