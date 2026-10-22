@@ -4,11 +4,12 @@ Django + Google 登入的迷你選課系統：瀏覽課程、加退選（自動�
 
 ## 功能
 
-- **課程列表** — 關鍵字搜尋課名／課號／老師，依星期篩選，顯示已選人數與剩餘名額。
-- **加退選** — 加選前檢查衝堂、名額、學分上限；已加選的課會標示。
-- **我的課表** — 週一至週五、第 1–10 節網格，附總學分。
+- **課程列表** — 每行一個班別；關鍵字搜尋課名／課號／老師，依星期篩選，顯示每班已選人數與剩餘名額。
+- **一課多班** — 同一門課可有 A、B…多個班別（不同時間、教室、名額）；選課一律對「班別」進行。
+- **加退選** — 加選前檢查：同課已選其他班別、衝堂（以班別時段比對）、該班名額、學期學分上限；已加選的班別會標示。
+- **我的課表** — 週一至週五網格，節點標示班別與教室，附總學分（每門課只算一次）。
 - **登入** — 只開放 Google（django-allauth）。課程瀏覽免登入，加選才需要。
-- **老師專區** — 後台把 Teacher 綁到登入帳號後，該帳號可看到「我的課程」與自己課程的選課名單（姓名、信箱、加選時間）。
+- **老師專區** — 後台把 Teacher 綁到登入帳號後，該帳號可看到「我的課程」與自己課程的選課名單（姓名、信箱、班別、加選時間）。
 
 ## 快速開始
 
@@ -18,7 +19,7 @@ Django + Google 登入的迷你選課系統：瀏覽課程、加退選（自動�
 uv sync                        # 建 .venv 並安裝依賴
 cp .env.example .env           # 填入 Google OAuth 憑證，見下一節
 uv run manage.py migrate
-uv run manage.py seed          # 載入 10 門範例課程，可重複執行
+uv run manage.py seed          # 載入 10 門範例課程與班別，可重複執行
 uv run --env-file .env manage.py runserver
 ```
 
@@ -56,14 +57,14 @@ uv run --env-file .env manage.py runserver
 uv run manage.py test
 ```
 
-涵蓋加選的衝堂／額滿／退選流程、老師名單的可見性（本人 200、他人 404、匿名轉登入），以及三個頁面可正常渲染。
+涵蓋加選的五種結果（成功、同課另一班、衝堂、額滿、超學分）、退選後改選、開放轉址防護、老師名單的可見性（本人 200、他人 404、匿名轉登入）、頁面渲染，以及班別的欄位與唯一約束。
 
 ## 專案結構
 
 ```
 config/     settings、根路由（/admin/、/accounts/、courses）
-courses/    models（Term / Teacher / Course / Enrollment）、services、views、urls、templates、static
-courses/management/commands/seed.py    範例學期與課程資料
+courses/    models（Term / Teacher / Course / Section / Enrollment）、services、views、urls、templates、static
+courses/management/commands/seed.py    範例學期、課程與班別資料
 ```
 
 ## 可調設定
@@ -76,7 +77,9 @@ courses/management/commands/seed.py    範例學期與課程資料
 
 ## 已知限制
 
-- 名額檢查在 SQLite 上取不到列鎖，高併發下可能超收；換 PostgreSQL 後 `select_for_update()` 才會真正生效（`courses/views.py`）。
+- 名額檢查在 SQLite 上取不到列鎖，高併發下可能超收；換 PostgreSQL 後 `select_for_update()` 才會真正生效（`courses/services.py`）。
 - 資料庫為 SQLite，定位是本地開發與 demo。
 - 老師只看得到當前學期的課與名單，歷年紀錄目前沒有入口。
 - 老師對自己的課仍看得到「加選」按鈕，系統沒擋老師加選自己的課。
+- `0005_section` 這個 migration 不可逆（把 Course 的時段欄位移到 Section 並刪除，`reverse` 是 noop）； downgrade 前請備份。
+- 「同課只選一班」是 `services.register` 的規則，DB 只約束 `(user, section)`；若 admin 手動造成同課兩班各一筆加選，系統不會擋，但課表與學分總和已按課號去重，不會雙算。

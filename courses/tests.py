@@ -3,7 +3,7 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from .models import Course, Enrollment, Teacher, Term
+from .models import Course, Enrollment, Section, Teacher, Term
 from .services import register
 
 
@@ -13,10 +13,18 @@ class CourseTestCase(TestCase):
         self.teacher = Teacher.objects.create(name="T")
         self.u = get_user_model().objects.create_user("u")
 
-    def course(self, code, start, end, capacity=40, day=1, term=None):
-        return Course.objects.create(
-            term=term or self.term, code=code, name=code, teacher=self.teacher,
-            day=day, start_period=start, end_period=end, capacity=capacity)
+    def course(self, code, term=None):
+        c, _ = Course.objects.get_or_create(term=term or self.term, code=code,
+                                            defaults=dict(name=code, teacher=self.teacher))
+        return c
+
+    def section(self, code, label, start, end, capacity=40, day=1, term=None):
+        return Section.objects.create(
+            course=self.course(code, term=term),
+            label=label, day=day, start_period=start, end_period=end, capacity=capacity)
+
+    def my_sections(self):
+        return list(Section.objects.filter(enrollments__user=self.u))
 
     def mine(self):
         return Enrollment.objects.filter(user=self.u).count()
@@ -24,41 +32,70 @@ class CourseTestCase(TestCase):
 
 class RegisterTests(CourseTestCase):
     def test_enrolls(self):
-        self.assertEqual(register(self.u, self.course("A", 1, 2)).code, "enrolled")
+        a = self.section("A", "A", 1, 2)
+        self.assertEqual(register(self.u, a).code, "enrolled")
         self.assertEqual(self.mine(), 1)
+        self.assertEqual([s.pk for s in self.my_sections()], [a.pk])
 
-    def test_already_enrolled(self):
-        a = self.course("A", 1, 2)
+    def test_already_enrolled_same_section(self):
+        a = self.section("A", "A", 1, 2)
         register(self.u, a)
         self.assertEqual(register(self.u, a).code, "already")
         self.assertEqual(self.mine(), 1)
 
-    def test_overlap_is_rejected(self):
-        self.course("A", 1, 2)
-        a = Course.objects.get(code="A")
-        b = self.course("B", 2, 3)  # 與 A 重疊一節
+    def test_other_section_of_same_course_is_rejected(self):
+        a = self.section("A", "A", 1, 2)
+        b = self.section("A", "B", 4, 5)  # 同課的 B 班，不同時段
         register(self.u, a)
-        self.assertEqual(register(self.u, b).code, "conflict")
+        r = register(self.u, b)
+        self.assertEqual(r.code, "already")
+        self.assertIn("A 班", r.message)
         self.assertEqual(self.mine(), 1)
 
-    def test_full_is_rejected(self):
-        a = self.course("A", 1, 2, capacity=1)
-        Enrollment.objects.create(user=get_user_model().objects.create_user("v"), course=a)
-        self.assertEqual(register(self.u, a).code, "full")
-        self.assertEqual(self.mine(), 0)
+    def test_can_switch_section_after_dropping(self):
+        a = self.section("A", "A", 1, 2)
+        b = self.section("A", "B", 4, 5)
+        register(self.u, a)
+        Enrollment.objects.filter(user=self.u, section=a).delete()
+        self.assertEqual(register(self.u, b).code, "enrolled")
+        self.assertEqual(self.mine(), 1)
+
+    def test_overlap_is_rejected(self):
+        a = self.section("A", "A", 1, 2)
+        b = self.section("B", "A", 2, 3)  # 不同課程，重疊一節
+        register(self.u, a)
+        r = register(self.u, b)
+        self.assertEqual(r.code, "conflict")
+        # 衝堂訊息引用的是「已選」的 A 課 A 班，不是被擋的 B
+        self.assertIn("A 班", r.message)
+        self.assertEqual(self.mine(), 1)
+
+    def test_conflict_checked_per_section_time(self):
+        a1 = self.section("A", "A", 1, 2)   # A 課 A 班：週一 1-2
+        b1 = self.section("B", "A", 4, 5)   # B 課 A 班：週一 4-5（不衝堂）
+        register(self.u, a1)
+        self.assertEqual(register(self.u, b1).code, "enrolled")
+
+    def test_full_is_rejected_per_section(self):
+        a = self.section("A", "A", 1, 2, capacity=1)
+        b = self.section("A", "B", 4, 5)
+        Enrollment.objects.create(user=get_user_model().objects.create_user("v"), section=a)
+        self.assertEqual(register(self.u, a).code, "full")  # A 班滿
+        self.assertEqual(register(self.u, b).code, "enrolled")  # B 班不受影響
+        self.assertEqual(self.mine(), 1)
 
     @override_settings(MAX_CREDITS=3)
     def test_credit_limit_is_per_term(self):
         term2 = Term.objects.create(code="114-2")
-        a = self.course("A", 1, 2)
-        b = self.course("B", 1, 2, term=term2)  # 別的學期，同時段也不算衝堂、不算學分
+        a = self.section("A", "A", 1, 2)
+        b = self.section("B", "A", 1, 2, term=term2)  # 別的學期，同時段也不算衝堂、不算學分
         self.assertEqual(register(self.u, a).code, "enrolled")
         self.assertEqual(register(self.u, b).code, "enrolled")
 
     @override_settings(MAX_CREDITS=3)
     def test_over_credits_is_rejected(self):
-        a = self.course("A", 1, 2)
-        c = self.course("C", 4, 5)
+        a = self.section("A", "A", 1, 2)
+        c = self.section("C", "A", 4, 5)
         self.assertEqual(register(self.u, a).code, "enrolled")
         self.assertEqual(register(self.u, c).code, "over_credits")
         self.assertEqual(self.mine(), 1)
@@ -67,12 +104,12 @@ class RegisterTests(CourseTestCase):
 class EnrollViewTests(CourseTestCase):
     def setUp(self):
         super().setUp()
-        self.a = self.course("A", 1, 2, capacity=1)
-        self.d = self.course("D", 4, 5)
+        self.a = self.section("A", "A", 1, 2, capacity=1)
+        self.d = self.section("D", "A", 4, 5)
         self.client.force_login(self.u)
 
-    def post(self, course, name="enroll"):
-        return self.client.post(reverse(name, args=[course.pk]), follow=True)
+    def post(self, section, name="enroll"):
+        return self.client.post(reverse(name, args=[section.pk]), follow=True)
 
     def test_enroll_and_drop(self):
         self.post(self.a)
@@ -84,37 +121,38 @@ class EnrollViewTests(CourseTestCase):
 
     def test_next_cannot_redirect_offsite(self):
         r = self.client.post(reverse("enroll", args=[self.a.pk]), {"next": "https://evil.example/x"})
-        self.assertEqual(r["Location"], reverse("course_detail", args=[self.a.pk]))
+        self.assertEqual(r["Location"], reverse("course_detail", args=[self.a.course_id]))
         r = self.client.post(reverse("enroll", args=[self.d.pk]), {"next": "/my/"})
         self.assertEqual(r["Location"], "/my/")
 
-    def test_list_only_shows_current_term(self):
+    def test_list_shows_sections_of_current_term_only(self):
         term2 = Term.objects.create(code="114-2")
-        self.course("OLD", 1, 2, term=term2)
-        codes = [c.code for c in self.client.get(reverse("course_list")).context["courses"]]
+        self.section("OLD", "A", 1, 2, term=term2)
+        rows = self.client.get(reverse("course_list")).context["sections"]
+        codes = [s.course.code for s in rows]
         self.assertIn("A", codes)
         self.assertNotIn("OLD", codes)
 
     def test_pages_render(self):
-        for name, args in [("course_list", []), ("course_detail", [self.a.pk]), ("my_schedule", [])]:
+        for name, args in [("course_list", []), ("course_detail", [self.a.course_id]), ("my_schedule", [])]:
             self.assertEqual(self.client.get(reverse(name, args=args)).status_code, 200)
 
 
 class TeacherRoleTests(CourseTestCase):
     def setUp(self):
         super().setUp()
-        self.a = self.course("A", 1, 2)
+        self.a = self.section("A", "A", 1, 2)
         self.student = get_user_model().objects.create_user("s", first_name="王小明", email="s@example.com")
-        Enrollment.objects.create(user=self.student, course=self.a)
+        Enrollment.objects.create(user=self.student, section=self.a)
         self.teacher.user = self.u
         self.teacher.save()
 
     def test_teaching_lists_only_own_current_term_courses(self):
-        self.course("OLD", 1, 2, term=Term.objects.create(code="114-2"))
+        self.section("OLD", "A", 1, 2, term=Term.objects.create(code="114-2"))
         self.client.force_login(self.u)
         r = self.client.get(reverse("teaching"))
         self.assertEqual(r.status_code, 200)
-        self.assertEqual([c.pk for c in r.context["courses"]], [self.a.pk])
+        self.assertEqual([c.pk for c in r.context["courses"]], [self.a.course_id])
 
     def test_unbound_user_sees_empty_teaching_page(self):
         self.client.force_login(self.student)
@@ -125,25 +163,25 @@ class TeacherRoleTests(CourseTestCase):
 
     def test_roster_shows_student_name(self):
         self.client.force_login(self.u)
-        r = self.client.get(reverse("course_roster", args=[self.a.pk]))
+        r = self.client.get(reverse("course_roster", args=[self.a.course_id]))
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, "王小明")
         self.assertContains(r, "s@example.com")
 
     def test_other_user_gets_404_on_roster(self):
         self.client.force_login(self.student)
-        self.assertEqual(self.client.get(reverse("course_roster", args=[self.a.pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse("course_roster", args=[self.a.course_id])).status_code, 404)
 
     def test_anonymous_is_redirected_to_login(self):
-        for name, args in [("teaching", []), ("course_roster", [self.a.pk])]:
+        for name, args in [("teaching", []), ("course_roster", [self.a.course_id])]:
             r = self.client.get(reverse(name, args=args))
             self.assertEqual(r.status_code, 302)
             self.assertIn(reverse("google_login"), r["Location"])
         self.assertEqual(self.client.get(reverse("course_list")).status_code, 200)
 
     def test_roster_link_only_for_teacher(self):
-        detail = reverse("course_detail", args=[self.a.pk])
-        roster = reverse("course_roster", args=[self.a.pk])
+        detail = reverse("course_detail", args=[self.a.course_id])
+        roster = reverse("course_roster", args=[self.a.course_id])
         self.assertNotContains(self.client.get(detail), roster)
         self.client.force_login(self.student)
         self.assertNotContains(self.client.get(detail), roster)
@@ -157,11 +195,16 @@ class TeacherRoleTests(CourseTestCase):
         self.assertTrue(Course.objects.filter(pk=self.a.pk).exists())
 
 
-class CourseConstraintTests(CourseTestCase):
+class SectionConstraintTests(CourseTestCase):
     def test_end_before_start_is_rejected(self):
         with self.assertRaises(IntegrityError), transaction.atomic():
-            self.course("BAD", 5, 3)
+            self.section("BAD", "A", 5, 3)
 
     def test_same_code_allowed_in_another_term(self):
-        self.course("CS101", 1, 2)
-        self.course("CS101", 1, 2, term=Term.objects.create(code="114-2"))
+        self.section("CS101", "A", 1, 2)
+        self.section("CS101", "A", 1, 2, term=Term.objects.create(code="114-2"))
+
+    def test_duplicate_label_in_same_course_is_rejected(self):
+        self.section("A", "A", 1, 2)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            self.section("A", "A", 4, 5)

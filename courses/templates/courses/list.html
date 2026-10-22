@@ -4,7 +4,7 @@
 <div class="page-head">
   <div>
     <h1>搜尋課程</h1>
-    <p class="sub">共 <span class="num">{{ courses|length }}</span> 門課{% if full_count %}，<span class="num">{{ full_count }}</span> 門已額滿{% endif %}</p>
+    <p class="sub">共 <span class="num">{{ sections|length }}</span> 個班別{% if full_count %}，<span class="num">{{ full_count }}</span> 班已額滿{% endif %}</p>
   </div>
 </div>
 
@@ -21,8 +21,8 @@
   <span>課程</span><span>課號</span><span>時間</span><span class="right">學分</span><span class="right">名額</span><span></span>
 </div>
 <ul class="courses">
-  {% for course in courses %}
-    {% include "courses/_row.html" with course=course next=request.get_full_path %}
+  {% for s in sections %}
+  {% include "courses/_section_row.html" with s=s is_mine=s.is_mine next=request.get_full_path %}
   {% empty %}
   <li class="empty">找不到符合的課程。{% if q or day %}<a href="{% url 'course_list' %}">清除篩選</a>{% endif %}</li>
   {% endfor %}

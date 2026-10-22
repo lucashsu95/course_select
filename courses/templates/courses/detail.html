@@ -4,17 +4,26 @@
 <div class="detail-head">
   <div>
     <h1>{{ course.name }}</h1>
-    <p class="sub">{{ course.code }} · {{ course.teacher }} · {{ course.time_display }} · {{ course.room|default:"教室未定" }}</p>
+    <p class="sub">{{ course.code }} · {{ course.teacher }} · <span class="num">{{ course.credits }}</span> 學分{% if my_section %} · 你目前在 <strong>{{ my_section.label_display }}</strong>{% endif %}</p>
   </div>
   <div class="action">
-    {% if user.is_authenticated %}
-      {% if is_teacher %}<a class="btn btn-secondary" href="{% url 'course_roster' course.pk %}">選課名單</a>{% endif %}
-      {% include "courses/_action.html" with is_mine=is_mine primary=1 %}
-    {% else %}
+    {% if not user.is_authenticated %}
       <p class="login-hint">登入後才能加選 · <a href="{% url 'google_login' %}">以 Google 登入</a></p>
     {% endif %}
+    {% if user.is_authenticated and is_teacher %}<a class="btn btn-secondary" href="{% url 'course_roster' course.pk %}">選課名單</a>{% endif %}
   </div>
 </div>
+
+<section class="panel">
+  <h2>班別（選一班加選）</h2>
+  <ul class="courses">
+    {% for s in sections %}
+    {% include "courses/_section_row.html" with s=s is_mine=s.is_mine next=request.path in_course_detail=True %}
+    {% empty %}
+    <li class="empty">這門課還沒開放任何班別。</li>
+    {% endfor %}
+  </ul>
+</section>
 
 <div class="detail-grid">
   <section class="syllabus">
@@ -26,31 +35,8 @@
     <h2>課程資訊</h2>
     <dl>
       <dt>學分</dt><dd><span class="num">{{ course.credits }}</span> 學分</dd>
-      <dt>時間</dt><dd>{{ course.time_display }}</dd>
-      <dt>教室</dt><dd>{{ course.room|default:"未定" }}</dd>
       <dt>老師</dt><dd>{{ course.teacher }}{% if course.teacher.email %}<br><span class="course-meta">{{ course.teacher.email }}</span>{% endif %}</dd>
-      <dt>名額</dt>
-      <dd>
-        <div class="seats">
-          <span class="seats-num num">{{ course.enrolled }}<span class="of"> / {{ course.capacity }}</span></span>
-          {% if course.enrolled >= course.capacity %}<span class="full-flag">額滿</span>{% endif %}
-          <span class="track" aria-hidden="true"><span style="width:{% widthratio course.enrolled course.capacity 100 %}%"></span></span>
-        </div>
-      </dd>
     </dl>
-
-    <div class="when">
-      <p class="when-label">每週上課時段</p>
-      {# shortcut: 迷你週表固定以 10 節為比例，超過 10 節的課會裁切，真的需要時改吃 last_period #}
-      <div class="mini-week" aria-hidden="true">
-        {% for d, label in days %}
-        <div class="mini-day{% if course.day == d %} on{% endif %}">
-          <span class="mini-track">{% if course.day == d %}<span class="mini-block" style="top:{% widthratio course.start_period|add:"-1" 10 100 %}%;height:{% widthratio course.periods 10 100 %}%"></span>{% endif %}</span>
-          <span class="mini-name">{{ label|slice:"1:" }}</span>
-        </div>
-        {% endfor %}
-      </div>
-    </div>
   </aside>
 </div>
 
@@ -59,7 +45,12 @@
   <h2>{{ course.teacher }} 的其他課程</h2>
   <ul class="courses">
     {% for c in related %}
-      {% include "courses/_row.html" with course=c next=request.path hide_teacher=1 %}
+    <li class="course-row">
+      <div class="identity">
+        <a class="course-name" href="{% url 'course_detail' c.pk %}">{{ c.name }}</a>
+        <p class="course-meta">{{ c.code }} · {{ c.credits }} 學分</p>
+      </div>
+    </li>
     {% endfor %}
   </ul>
 </section>

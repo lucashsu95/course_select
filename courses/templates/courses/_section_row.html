@@ -1,0 +1,28 @@
+<li class="course-row">
+  <div class="identity">
+    {% if in_course_detail %}
+      <span class="course-name">{{ s.label_display }}</span>
+    {% else %}
+      <a class="course-name" href="{% url 'course_detail' s.course.pk %}">{{ s.course.name }}</a>
+      <p class="course-meta">{{ s.course.teacher }}</p>
+    {% endif %}
+  </div>
+  <div class="meta">
+    {% if in_course_detail %}
+      <span class="c-time">{{ s.time_display }}</span>
+      <span class="c-code"><span class="room">{{ s.room|default:"教室未定" }}</span></span>
+    {% else %}
+      <span class="c-code">{{ s.course.code }}<span class="room">· {{ s.room|default:"教室未定" }}</span></span>
+      <span class="c-time">{{ s.label_display }} · {{ s.time_display }}</span>
+      <span class="c-credits num">{{ s.course.credits }} 學分</span>
+    {% endif %}
+  </div>
+  <div class="seats">
+    <span class="seats-num num">{{ s.enrolled }}<span class="of"> / {{ s.capacity }}</span></span>
+    {% if s.is_full %}<span class="full-flag">額滿</span>{% endif %}
+    <span class="track" aria-hidden="true"><span style="width:{% widthratio s.enrolled s.capacity 100 %}%"></span></span>
+  </div>
+  <div class="action">
+    {% if user.is_authenticated %}{% include "courses/_action.html" with section=s is_mine=is_mine next=next %}{% endif %}
+  </div>
+</li>

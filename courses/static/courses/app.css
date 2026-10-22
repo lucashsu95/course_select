@@ -274,6 +274,10 @@ h2 { font-size: var(--fs-section); font-weight: 600; }
 .c-credits { font-size: 13px; color: var(--muted); text-align: right; white-space: nowrap; }
 .course-row .action { justify-self: end; display: flex; }
 
+/* 老師專區行只有 identity／meta／action 三段，改用 3 欄 grid 並讓 meta 內換行 */
+.course-row--teach { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
+.course-row--teach .meta { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+
 .courses { list-style: none; margin: 0; padding: 0; }
 .course-row { padding: 16px 0; border-top: 1px solid var(--rule); position: relative; }
 .courses .course-row:first-child { border-top: 1px solid var(--border); }
@@ -354,15 +358,6 @@ h2 { font-size: var(--fs-section); font-weight: 600; }
 .facts .seats { justify-self: stretch; text-align: left; }
 .facts .track { margin-left: 0; width: 100%; max-width: 240px; }
 
-.when { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--rule); }
-.when-label { margin-bottom: 10px; color: var(--muted); font-size: 12px; }
-.mini-week { display: grid; grid-template-columns: repeat(5, 28px); justify-content: space-between; gap: 0; }
-.mini-day { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.mini-track { position: relative; display: block; width: 3px; height: 56px; border-radius: 2px; background: var(--rule); overflow: hidden; }
-.mini-block { position: absolute; left: -2px; width: 7px; border-radius: 2px; background: var(--accent-track); }
-.mini-day.on .mini-block { background: var(--accent); }
-.mini-name { color: var(--muted); font-size: 11px; }
-.mini-day.on .mini-name { color: var(--accent-ink); font-weight: 500; }
 
 .login-hint { color: var(--muted); font-size: 13px; }
 .login-hint a { color: var(--accent-ink); }
@@ -436,8 +431,6 @@ h2 { font-size: var(--fs-section); font-weight: 600; }
   .menu .nav a svg { width: 18px; height: 18px; }
   .menu .btn { height: 44px; font-size: 14px; }
   .menu .who-name { font-size: 14px; }
-
-  .mini-week { max-width: 320px; }
 
   .list-head { display: none; }
   .course-row {

@@ -6,14 +6,14 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
-from .models import Course, Enrollment, Term
+from .models import Course, Enrollment, Section, Term
 from .services import register
 
 
-def _my_course_ids(user):
+def _my_section_ids(user):
     if not user.is_authenticated:
         return set()
-    return set(Enrollment.objects.filter(user=user).values_list("course_id", flat=True))
+    return set(Enrollment.objects.filter(user=user).values_list("section_id", flat=True))
 
 
 def _redirect_next(request, fallback, *args):
@@ -25,91 +25,104 @@ def _redirect_next(request, fallback, *args):
 
 
 def course_list(request):
+    """課程列表：每行是一個班別。"""
     q = request.GET.get("q", "").strip()
     day = request.GET.get("day", "")
     term = Term.current()
-    courses = Course.objects.filter(term=term).select_related("teacher").annotate(enrolled=Count("enrollment"))
+    sections = (Section.objects.filter(course__term=term)
+                .select_related("course__teacher")
+                .annotate(enrolled=Count("enrollments")))
     if q:
-        courses = courses.filter(Q(name__icontains=q) | Q(code__icontains=q) | Q(teacher__name__icontains=q))
+        sections = sections.filter(Q(course__name__icontains=q) | Q(course__code__icontains=q)
+                                   | Q(course__teacher__name__icontains=q))
     if day.isdigit():
-        courses = courses.filter(day=int(day))
-    mine = _my_course_ids(request.user)
-    courses = list(courses)
-    for c in courses:
-        c.is_mine = c.pk in mine
-    full_count = sum(1 for c in courses if c.is_full)
+        sections = sections.filter(day=int(day))
+    mine = _my_section_ids(request.user)
+    sections = list(sections)
+    for s in sections:
+        s.is_mine = s.pk in mine
+    full_count = sum(1 for s in sections if s.is_full)
     return render(request, "courses/list.html", {
-        "courses": courses, "q": q, "day": day, "days": Course.DAYS, "full_count": full_count,
+        "sections": sections, "q": q, "day": day, "days": Section.DAYS, "full_count": full_count,
     })
 
 
 def course_detail(request, pk):
-    course = get_object_or_404(Course.objects.select_related("teacher").annotate(enrolled=Count("enrollment")), pk=pk)
-    mine = _my_course_ids(request.user)
+    course = get_object_or_404(Course.objects.select_related("teacher"), pk=pk)
+    sections = list(Section.objects.filter(course=course).annotate(enrolled=Count("enrollments")))
+    mine = _my_section_ids(request.user)
+    for s in sections:
+        s.is_mine = s.pk in mine
+    my_section = next((s for s in sections if s.is_mine), None)
     # 匿名使用者的 id 與 teacher.user_id 都可能是 None，先擋掉未登入
     is_teacher = request.user.is_authenticated and course.teacher.user_id == request.user.id
     related = list(Course.objects.filter(teacher=course.teacher, term=course.term).exclude(pk=pk)
-                   .select_related("teacher").annotate(enrolled=Count("enrollment"))[:4])
-    for c in related:
-        c.is_mine = c.pk in mine
+                   .select_related("teacher")[:4])
     return render(request, "courses/detail.html", {
-        "course": course, "is_mine": course.pk in mine, "is_teacher": is_teacher, "related": related,
-        "days": Course.DAYS,
+        "course": course, "sections": sections, "my_section": my_section, "is_teacher": is_teacher, "related": related,
     })
 
 
 @login_required
 @require_POST
 def enroll(request, pk):
-    course = get_object_or_404(Course, pk=pk)
-    result = register(request.user, course)
+    section = get_object_or_404(Section.objects.select_related("course"), pk=pk)
+    result = register(request.user, section)
     if result.ok:
         messages.success(request, result.message)
     elif result.code == "already":
         messages.info(request, result.message)
     else:
         messages.error(request, result.message)
-    return _redirect_next(request, "course_detail", pk)
+    return _redirect_next(request, "course_detail", section.course_id)
 
 
 @login_required
 @require_POST
 def drop(request, pk):
-    deleted, _ = Enrollment.objects.filter(user=request.user, course_id=pk).delete()
+    section = get_object_or_404(Section.objects.select_related("course"), pk=pk)
+    deleted, _ = Enrollment.objects.filter(user=request.user, section_id=pk).delete()
     if deleted:
-        messages.success(request, "已退選。")
+        messages.success(request, f"已退選「{section.course.name} {section.label_display}」。")
     else:
-        messages.info(request, "你沒有選這門課。")
+        messages.info(request, "你沒有選這個班別。")
     return _redirect_next(request, "my_schedule")
 
 
 @login_required
 def my_schedule(request):
-    mine = list(Course.objects.filter(enrollment__user=request.user, term=Term.current())
-                .select_related("teacher").annotate(enrolled=Count("enrollment")))
-    grid = {(c.day, p): c for c in mine for p in range(c.start_period, c.end_period + 1)}
-    last_period = max(8, max((c.end_period for c in mine), default=8))
-    rows = [(p, [grid.get((d, p)) for d, _ in Course.DAYS]) for p in range(1, last_period + 1)]
-    for c in mine:
-        c.is_mine = True
+    mine = list(Section.objects.filter(enrollments__user=request.user, course__term=Term.current())
+                .select_related("course__teacher"))
+    grid = {(s.day, p): s for s in mine for p in range(s.start_period, s.end_period + 1)}
+    last_period = max(8, max((s.end_period for s in mine), default=8))
+    rows = [(p, [grid.get((d, p)) for d, _ in Section.DAYS]) for p in range(1, last_period + 1)]
+    for s in mine:
+        s.is_mine = True
     return render(request, "courses/schedule.html", {
-        "mine": mine, "rows": rows, "days": [label for _, label in Course.DAYS],
-        "total": sum(c.credits for c in mine), "max": settings.MAX_CREDITS,
+        "mine": mine, "rows": rows, "days": [label for _, label in Section.DAYS],
+        "total": sum({s.course_id: s.course.credits for s in mine}.values()), "max": settings.MAX_CREDITS,
     })
 
 
 @login_required
 def teaching_courses(request):
-    courses = (Course.objects.filter(teacher__user=request.user, term=Term.current())
-               .select_related("teacher").annotate(enrolled=Count("enrollment")))
+    courses = list(Course.objects.filter(teacher__user=request.user, term=Term.current())
+                   .select_related("teacher"))
+    by_course = {}
+    for s in (Section.objects.filter(course__teacher__user=request.user, course__term=Term.current())
+              .select_related("course").annotate(enrolled=Count("enrollments"))):
+        by_course.setdefault(s.course_id, []).append(s)
+    for c in courses:
+        c.section_list = by_course.get(c.pk, [])
     return render(request, "courses/teaching.html", {"courses": courses})
 
 
 @login_required
 def course_roster(request, pk):
-    course = get_object_or_404(
-        Course.objects.select_related("teacher").annotate(enrolled=Count("enrollment")),
-        pk=pk, teacher__user=request.user)
+    course = get_object_or_404(Course.objects.select_related("teacher"), pk=pk, teacher__user=request.user)
+    sections = list(Section.objects.filter(course=course).annotate(enrolled=Count("enrollments")))
+    enrollments = (Enrollment.objects.filter(section__course=course)
+                   .select_related("user", "section").order_by("created"))
     return render(request, "courses/roster.html", {
-        "course": course, "enrollments": course.enrollment_set.select_related("user").order_by("created"),
+        "course": course, "sections": sections, "enrollments": enrollments,
     })
