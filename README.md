@@ -75,6 +75,10 @@ courses/management/commands/seed.py    範例學期、課程與班別資料
 | `.env` | `SECRET_KEY`、`DEBUG`、`ALLOWED_HOSTS`（上線時設 `DEBUG=0` 且填 `ALLOWED_HOSTS`） |
 | `.env` | `USE_NGROK=1` 與 `NGROK_ORIGIN=https://你的固定網域` 才啟用 ngrok 的 https 與 CSRF 設定，預設關閉 |
 
+## 業務規則
+
+選課系統的完整業務邏輯（加選四條規則、衝堂判定、學分計算、角色權限、已知限制與 backlog 對照）見 [`docs/business-rules.md`](docs/business-rules.md)。
+
 ## 已知限制
 
 - 名額檢查在 SQLite 上取不到列鎖，高併發下可能超收；換 PostgreSQL 後 `select_for_update()` 才會真正生效（`courses/services.py`）。
