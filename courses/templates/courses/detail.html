@@ -8,6 +8,7 @@
   </div>
   <div class="action">
     {% if user.is_authenticated %}
+      {% if is_teacher %}<a class="btn btn-secondary" href="{% url 'course_roster' course.pk %}">選課名單</a>{% endif %}
       {% include "courses/_action.html" with is_mine=is_mine primary=1 %}
     {% else %}
       <p class="login-hint">登入後才能加選 · <a href="{% url 'google_login' %}">以 Google 登入</a></p>
@@ -37,6 +38,30 @@
         </div>
       </dd>
     </dl>
+
+    <div class="when">
+      <p class="when-label">每週上課時段</p>
+      {# shortcut: 迷你週表固定以 10 節為比例，超過 10 節的課會裁切，真的需要時改吃 last_period #}
+      <div class="mini-week" aria-hidden="true">
+        {% for d, label in days %}
+        <div class="mini-day{% if course.day == d %} on{% endif %}">
+          <span class="mini-track">{% if course.day == d %}<span class="mini-block" style="top:{% widthratio course.start_period|add:"-1" 10 100 %}%;height:{% widthratio course.periods 10 100 %}%"></span>{% endif %}</span>
+          <span class="mini-name">{{ label|slice:"1:" }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
   </aside>
 </div>
+
+{% if related %}
+<section class="related">
+  <h2>{{ course.teacher }} 的其他課程</h2>
+  <ul class="courses">
+    {% for c in related %}
+      {% include "courses/_row.html" with course=c next=request.path hide_teacher=1 %}
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
 {% endblock %}

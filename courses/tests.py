@@ -100,6 +100,63 @@ class EnrollViewTests(CourseTestCase):
             self.assertEqual(self.client.get(reverse(name, args=args)).status_code, 200)
 
 
+class TeacherRoleTests(CourseTestCase):
+    def setUp(self):
+        super().setUp()
+        self.a = self.course("A", 1, 2)
+        self.student = get_user_model().objects.create_user("s", first_name="王小明", email="s@example.com")
+        Enrollment.objects.create(user=self.student, course=self.a)
+        self.teacher.user = self.u
+        self.teacher.save()
+
+    def test_teaching_lists_only_own_current_term_courses(self):
+        self.course("OLD", 1, 2, term=Term.objects.create(code="114-2"))
+        self.client.force_login(self.u)
+        r = self.client.get(reverse("teaching"))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual([c.pk for c in r.context["courses"]], [self.a.pk])
+
+    def test_unbound_user_sees_empty_teaching_page(self):
+        self.client.force_login(self.student)
+        r = self.client.get(reverse("teaching"))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(list(r.context["courses"]), [])
+        self.assertContains(r, "這學期沒有你的課程")
+
+    def test_roster_shows_student_name(self):
+        self.client.force_login(self.u)
+        r = self.client.get(reverse("course_roster", args=[self.a.pk]))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "王小明")
+        self.assertContains(r, "s@example.com")
+
+    def test_other_user_gets_404_on_roster(self):
+        self.client.force_login(self.student)
+        self.assertEqual(self.client.get(reverse("course_roster", args=[self.a.pk])).status_code, 404)
+
+    def test_anonymous_is_redirected_to_login(self):
+        for name, args in [("teaching", []), ("course_roster", [self.a.pk])]:
+            r = self.client.get(reverse(name, args=args))
+            self.assertEqual(r.status_code, 302)
+            self.assertIn(reverse("google_login"), r["Location"])
+        self.assertEqual(self.client.get(reverse("course_list")).status_code, 200)
+
+    def test_roster_link_only_for_teacher(self):
+        detail = reverse("course_detail", args=[self.a.pk])
+        roster = reverse("course_roster", args=[self.a.pk])
+        self.assertNotContains(self.client.get(detail), roster)
+        self.client.force_login(self.student)
+        self.assertNotContains(self.client.get(detail), roster)
+        self.client.force_login(self.u)
+        self.assertContains(self.client.get(detail), roster)
+
+    def test_deleting_user_keeps_teacher(self):
+        self.u.delete()
+        self.teacher.refresh_from_db()
+        self.assertIsNone(self.teacher.user)
+        self.assertTrue(Course.objects.filter(pk=self.a.pk).exists())
+
+
 class CourseConstraintTests(CourseTestCase):
     def test_end_before_start_is_rejected(self):
         with self.assertRaises(IntegrityError), transaction.atomic():

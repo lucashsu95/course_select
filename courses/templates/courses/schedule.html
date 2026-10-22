@@ -34,18 +34,13 @@
     </tbody>
   </table>
 </div>
+<p class="scroll-hint">左右滑動看完整一週。</p>
 
 <section class="mine">
   <div class="mine-head"><h2>已選課程</h2><span class="num">{{ mine|length }} 門</span></div>
-  <ul class="courses courses--mine">
+  <ul class="courses">
     {% for course in mine %}
-    <li class="course-row">
-      <div class="identity">
-        <a class="course-name" href="{% url 'course_detail' course.pk %}">{{ course.name }}</a>
-        <p class="course-meta">{{ course.code }} · {{ course.teacher }} · {{ course.time_display }} · {{ course.room|default:"教室未定" }} · {{ course.credits }} 學分</p>
-      </div>
-      <div class="action">{% include "courses/_action.html" with is_mine=True next=request.path %}</div>
-    </li>
+      {% include "courses/_row.html" with course=course next=request.path %}
     {% empty %}
     <li class="empty">還沒有選課，去 <a href="{% url 'course_list' %}">搜尋課程</a> 看看吧。</li>
     {% endfor %}

@@ -7,6 +7,11 @@
   <a href="{% url 'my_schedule' %}"{% if request.resolver_match.url_name == 'my_schedule' %} class="active" aria-current="page"{% endif %}>
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="2"/><path d="M2 6.5h12M6 3v11M10 3v11"/></svg>
     我的課表</a>
+  {% if user.teacher_profile %}
+  <a href="{% url 'teaching' %}"{% if request.resolver_match.url_name == 'teaching' or request.resolver_match.url_name == 'course_roster' %} class="active" aria-current="page"{% endif %}>
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2.5 3.5h11v9h-11z"/><path d="M5 6.5h6M5 9.5h4"/></svg>
+    我的課程</a>
+  {% endif %}
   {% if user.is_staff %}
   <a href="{% url 'admin:index' %}">
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="5.5" cy="4" r="1.5" fill="currentColor" stroke="none"/><circle cx="10.5" cy="8" r="1.5" fill="currentColor" stroke="none"/><circle cx="5.5" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>

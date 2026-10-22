@@ -1,0 +1,20 @@
+{# 課程列：需要 course（含 enrolled、is_mine）、next #}
+<li class="course-row">
+  <div class="identity">
+    <a class="course-name" href="{% url 'course_detail' course.pk %}">{{ course.name }}</a>
+    {% if not hide_teacher %}<p class="course-meta">{{ course.teacher }}</p>{% endif %}
+  </div>
+  <div class="meta">
+    <span class="c-code">{{ course.code }}<span class="room">· {{ course.room|default:"教室未定" }}</span></span>
+    <span class="c-time">{{ course.time_display }}</span>
+    <span class="c-credits num">{{ course.credits }} 學分</span>
+  </div>
+  <div class="seats">
+    <span class="seats-num num">{{ course.enrolled }}<span class="of"> / {{ course.capacity }}</span></span>
+    {% if course.is_full %}<span class="full-flag">額滿</span>{% endif %}
+    <span class="track" aria-hidden="true"><span style="width:{% widthratio course.enrolled course.capacity 100 %}%"></span></span>
+  </div>
+  <div class="action">
+    {% if user.is_authenticated %}{% include "courses/_action.html" with is_mine=course.is_mine next=next %}{% endif %}
+  </div>
+</li>

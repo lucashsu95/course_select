@@ -6,6 +6,8 @@ from django.db import models
 class Teacher(models.Model):
     name = models.CharField("姓名", max_length=50)
     email = models.EmailField("信箱", blank=True)
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                related_name="teacher_profile", verbose_name="登入帳號")
 
     def __str__(self):
         return self.name

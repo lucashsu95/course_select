@@ -46,12 +46,14 @@ def course_list(request):
 def course_detail(request, pk):
     course = get_object_or_404(Course.objects.select_related("teacher").annotate(enrolled=Count("enrollment")), pk=pk)
     mine = _my_course_ids(request.user)
+    # 匿名使用者的 id 與 teacher.user_id 都可能是 None，先擋掉未登入
+    is_teacher = request.user.is_authenticated and course.teacher.user_id == request.user.id
     related = list(Course.objects.filter(teacher=course.teacher, term=course.term).exclude(pk=pk)
                    .select_related("teacher").annotate(enrolled=Count("enrollment"))[:4])
     for c in related:
         c.is_mine = c.pk in mine
     return render(request, "courses/detail.html", {
-        "course": course, "is_mine": course.pk in mine, "related": related,
+        "course": course, "is_mine": course.pk in mine, "is_teacher": is_teacher, "related": related,
         "days": Course.DAYS,
     })
 
@@ -93,4 +95,21 @@ def my_schedule(request):
     return render(request, "courses/schedule.html", {
         "mine": mine, "rows": rows, "days": [label for _, label in Course.DAYS],
         "total": sum(c.credits for c in mine), "max": settings.MAX_CREDITS,
+    })
+
+
+@login_required
+def teaching_courses(request):
+    courses = (Course.objects.filter(teacher__user=request.user, term=Term.current())
+               .select_related("teacher").annotate(enrolled=Count("enrollment")))
+    return render(request, "courses/teaching.html", {"courses": courses})
+
+
+@login_required
+def course_roster(request, pk):
+    course = get_object_or_404(
+        Course.objects.select_related("teacher").annotate(enrolled=Count("enrollment")),
+        pk=pk, teacher__user=request.user)
+    return render(request, "courses/roster.html", {
+        "course": course, "enrollments": course.enrollment_set.select_related("user").order_by("created"),
     })
