@@ -442,3 +442,115 @@ class WaitlistTests(CourseTestCase):
         self.assertFalse(Enrollment.objects.filter(user=self.u, section=self.a).exists())
         # u 的等待列已被移出
         self.assertFalse(Waitlist.objects.filter(user=self.u, section=self.a).exists())
+class PrereqTests(CourseTestCase):
+    def past_section(self, code, label="A"):
+        past = Term.objects.get_or_create(code="113-2", defaults={})[0]
+        c, _ = Course.objects.get_or_create(term=past, code=code,
+                                            defaults=dict(name=code, teacher=self.teacher))
+        return Section.objects.update_or_create(course=c, label=label,
+                                                defaults=dict(day=5, start_period=1, end_period=2))[0]
+
+    def with_prereq(self, section, *prereq_codes):
+        section.course.prerequisites.set([self.past_section(c).course for c in prereq_codes])
+
+    def test_missing_prereq_blocks(self):
+        a = self.section("CS301", "A", 3, 5)
+        self.with_prereq(a, "CS201")
+        r = register(self.u, a)
+        self.assertEqual(r.code, "prereq")
+        self.assertIn("CS201", r.message)
+        self.assertEqual(self.mine(), 0)
+
+    def test_completed_prereq_allows(self):
+        a = self.section("CS301", "A", 3, 5)
+        self.with_prereq(a, "CS201")
+        Enrollment.objects.create(user=self.u, section=self.past_section("CS201"))
+        self.assertEqual(register(self.u, a).code, "enrolled")
+
+    def test_multiple_prereqs_missing_one(self):
+        a = self.section("CS301", "A", 3, 5)
+        self.with_prereq(a, "CS101", "CS201")
+        Enrollment.objects.create(user=self.u, section=self.past_section("CS101"))
+        r = register(self.u, a)
+        self.assertEqual(r.code, "prereq")
+        self.assertIn("CS201", r.message)
+        self.assertNotIn("CS101", r.message)
+
+    def test_current_term_enrollment_does_not_count(self):
+        # 同一學期的加選不算「修過」，只有過去學期才算
+        a = self.section("CS301", "A", 3, 5)
+        self.with_prereq(a, "CS201")
+        past = self.past_section("CS201")
+        cur = self.section("CS201", "A", 1, 2)
+        Enrollment.objects.create(user=self.u, section=cur)  # 本學期選了 CS201（但先修比的是 past course 的 code）
+        # 本學期那筆的 course.term 是 is_current=True → 不算已修
+        self.assertEqual(register(self.u, a).code, "prereq")
+
+    def test_post_enroll_blocked_via_view(self):
+        self.client.force_login(self.u)
+        a = self.section("CS301", "A", 3, 5)
+        self.with_prereq(a, "CS201")
+        r = self.client.post(reverse("enroll", args=[a.pk]), follow=True)
+        self.assertContains(r, "先修")
+        self.assertEqual(self.mine(), 0)
+
+    def test_guest_list_shows_prereqs_unmarked(self):
+        a = self.section("CS301", "A", 3, 5)
+        self.with_prereq(a, "CS201")
+        r = self.client.get(reverse("course_list"))
+        self.assertContains(r, "先修：CS201")
+        self.assertNotContains(r, "未修")
+        self.assertNotContains(r, "✓")
+
+    def test_logged_in_list_marks_completed_and_missing(self):
+        self.client.force_login(self.u)
+        a = self.section("CS301", "A", 3, 5)
+        self.with_prereq(a, "CS101", "CS201")
+        Enrollment.objects.create(user=self.u, section=self.past_section("CS101"))
+        r = self.client.get(reverse("course_list"))
+        self.assertContains(r, "CS101✓")
+        self.assertContains(r, "CS201")
+        self.assertContains(r, "未修")
+
+    def test_detail_shows_prereqs(self):
+        self.client.force_login(self.u)
+        a = self.section("CS301", "A", 3, 5)
+        self.with_prereq(a, "CS201")
+        r = self.client.get(reverse("course_detail", args=[a.course_id]))
+        self.assertContains(r, "先修：CS201")
+        self.assertContains(r, "未修")
+
+
+class SlotFilterTests(CourseTestCase):
+    def setUp(self):
+        super().setUp()
+        # 四個時段各一、day 分開
+        self.am = self.section("AM1", "A", 2, 3)          # start 2，週一
+        self.mid = self.section("MID1", "A", 5, 6)         # start 5，週一
+        self.pm = self.section("PM1", "A", 8, 9, day=3)    # start 8，週三
+        self.eve = self.section("EVE1", "A", 11, 12, day=3)  # start 11，週三
+
+    def codes(self, **params):
+        r = self.client.get(reverse("course_list"), params)
+        return {s.course.code for s in r.context["sections"]}
+
+    def test_am(self):
+        self.assertEqual(self.codes(slot="am"), {"AM1"})
+
+    def test_midday(self):
+        self.assertEqual(self.codes(slot="midday"), {"MID1"})
+
+    def test_pm(self):
+        self.assertEqual(self.codes(slot="pm"), {"PM1"})
+
+    def test_evening(self):
+        self.assertEqual(self.codes(slot="evening"), {"EVE1"})
+
+    def test_slot_combines_with_day(self):
+        self.assertEqual(self.codes(day="3", slot="pm"), {"PM1"})
+        self.assertEqual(self.codes(day="3", slot="evening"), {"EVE1"})
+        self.assertEqual(self.codes(day="3", slot="am"), set())
+
+    def test_form_remembers_selection(self):
+        r = self.client.get(reverse("course_list"), {"slot": "pm"})
+        self.assertContains(r, 'value="pm" selected')

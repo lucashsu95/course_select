@@ -15,6 +15,7 @@
       <span class="c-code">{{ s.course.code }}<span class="room">· {{ s.room|default:"教室未定" }}</span></span>
       <span class="c-time">{{ s.label_display }} · {{ s.time_display }}</span>
       <span class="c-credits num">{{ s.course.credits }} 學分</span>
+      {% if s.prereq_list %}<span class="c-prereq">先修：{% for c, done in s.prereq_list %}{{ c.code }}{% if show_prereq_marks %}{% if done %}✓{% else %}<span class="prereq-missing">未修</span>{% endif %}{% endif %}{% if not forloop.last %}、{% endif %}{% endfor %}</span>{% endif %}
     {% endif %}
   </div>
   <div class="seats">
@@ -24,6 +25,6 @@
     <span class="track" aria-hidden="true"><span style="width:{% widthratio s.enrolled s.capacity 100 %}%"></span></span>
   </div>
   <div class="action">
-    {% if user.is_authenticated %}{% include "courses/_action.html" with section=s is_mine=is_mine next=next is_waiting=s.is_waiting wait_position=s.wait_position window_state=window.state %}{% endif %}
+    {% if user.is_authenticated %}{% include "courses/_action.html" with section=s is_mine=is_mine next=next is_waiting=s.is_waiting wait_position=s.wait_position show_prereq_marks=show_prereq_marks window_state=window.state %}{% endif %}
   </div>
 </li>

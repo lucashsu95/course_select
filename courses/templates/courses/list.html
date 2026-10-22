@@ -13,7 +13,11 @@
   <input type="search" name="q" value="{{ q }}" placeholder="課名、課號或老師" aria-label="搜尋課程">
   <select name="day" aria-label="星期">
     <option value="">全部星期</option>
-    {% for v, label in days %}<option value="{{ v }}" {% if day == v|stringformat:"s" %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    {% for v, label in days %}<option value="{{ v }}"{% if day == v|stringformat:"s" %} selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  <select name="slot" aria-label="時段">
+    <option value="">全部時段</option>
+    {% for v, label in slots %}<option value="{{ v }}"{% if slot == v %} selected{% endif %}>{{ label }}</option>{% endfor %}
   </select>
   <button class="btn btn-primary">搜尋</button>
 </form>
@@ -23,7 +27,7 @@
 </div>
 <ul class="courses">
   {% for s in sections %}
-  {% include "courses/_section_row.html" with s=s is_mine=s.is_mine next=request.get_full_path %}
+  {% include "courses/_section_row.html" with s=s is_mine=s.is_mine next=request.get_full_path show_prereq_marks=show_prereq_marks %}
   {% empty %}
   <li class="empty">找不到符合的課程。{% if q or day %}<a href="{% url 'course_list' %}">清除篩選</a>{% endif %}</li>
   {% endfor %}

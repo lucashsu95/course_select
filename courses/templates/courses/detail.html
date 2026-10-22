@@ -4,7 +4,7 @@
 <div class="detail-head">
   <div>
     <h1>{{ course.name }}</h1>
-    <p class="sub">{{ course.code }} · {{ course.teacher }} · <span class="num">{{ course.credits }}</span> 學分{% if my_section %} · 你目前在 <strong>{{ my_section.label_display }}</strong>{% endif %}</p>
+    <p class="sub">{{ course.code }} · {{ course.teacher }} · <span class="num">{{ course.credits }}</span> 學分{% if my_section %} · 你目前在 <strong>{{ my_section.label_display }}</strong>{% endif %}{% if prereqs %} · 先修：{% for c, done in prereqs %}{{ c.code }}{% if show_prereq_marks %}{% if done %}✓{% else %}<span class="prereq-missing">未修</span>{% endif %}{% endif %}{% if not forloop.last %}、{% endif %}{% endfor %}{% endif %}</p>
   </div>
   <div class="action">
     {% if not user.is_authenticated %}

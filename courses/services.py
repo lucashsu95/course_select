@@ -7,9 +7,17 @@ from django.utils import timezone
 from .models import Enrollment, Section, Waitlist
 
 
+def missing_prereqs(user, course):
+    """使用者還沒修的先修課。「已修」＝過去學期（is_current=False）有同課號的加選紀錄。"""
+    completed = set(Enrollment.objects.filter(
+        user=user, section__course__term__is_current=False)
+        .values_list("section__course__code", flat=True))
+    return [c for c in course.prerequisites.all() if c.code not in completed]
+
+
 @dataclass(frozen=True)
 class Result:
-    code: str  # enrolled / already / conflict / waitlisted / already_waitlisted / over_credits / not_open / closed
+    code: str  # enrolled / already / prereq / conflict / waitlisted / already_waitlisted / over_credits / not_open / closed
     message: str
 
     @property
@@ -18,7 +26,7 @@ class Result:
 
 
 def register(user, section):
-    """加選一個班別。先過選課時間窗，再查規則：同課不重複、不衝堂、額滿轉等待、不超學分。
+    """加選一個班別。先過選課時間窗，再查規則：同課不重複、先修已修、不衝堂、額滿轉等待、不超學分。
 
     額滿不再直接拒絕：改為加入該班等待名單（等有人退選自動遞補）。
     成功加選時，該課其他班的等待紀錄自動清掉。
@@ -39,6 +47,9 @@ def register(user, section):
                        .filter(enrollments__user=user, course__term=course.term))
         if (current := next((s for s in mine if s.course_id == course.pk), None)):
             return Result("already", f"你已經加選這門課（{current.label_display}）了。")
+        if missing := missing_prereqs(user, course):
+            names = "、".join(f"{c.code} {c.name}" for c in missing)
+            return Result("prereq", f"還缺先修課：{names}。")
         if (clash := next((s for s in mine if s.conflicts_with(section)), None)):
             return Result("conflict",
                           f"衝堂：和「{clash.course.name} {clash.label_display}」時間重疊。")
