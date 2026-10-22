@@ -24,7 +24,7 @@ def register(user, section):
         course = section.course
         # 目前這個學期已選的班別（每門課至多一個班別，由本函式的規則保證）
         mine = list(Section.objects.select_related("course")
-                       .filter(enrollment__user=user, course__term=course.term))
+                       .filter(enrollments__user=user, course__term=course.term))
         if (current := next((s for s in mine if s.course_id == course.pk), None)):
             return Result("already", f"你已經加選這門課（{current.label_display}）了。")
         if (clash := next((s for s in mine if s.conflicts_with(section)), None)):
@@ -32,7 +32,8 @@ def register(user, section):
                           f"衝堂：和「{clash.course.name} {clash.label_display}」時間重疊。")
         if section.is_full:
             return Result("full", f"{section.label_display}名額已滿。")
-        total = sum(s.course.credits for s in mine) + course.credits
+        # 同一門課至多一個班別是 service 層規則；DB 允許 admin 手動造成同課兩班，故按課號去重算學分
+        total = sum({s.course_id: s.course.credits for s in mine}.values()) + course.credits
         if total > settings.MAX_CREDITS:
             return Result("over_credits", f"超過學分上限 {settings.MAX_CREDITS}。")
         Enrollment.objects.create(user=user, section=section)

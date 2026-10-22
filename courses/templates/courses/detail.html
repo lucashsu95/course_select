@@ -14,27 +14,11 @@
   </div>
 </div>
 
-<section class="panel sections-panel">
+<section class="panel">
   <h2>班別（選一班加選）</h2>
   <ul class="courses">
     {% for s in sections %}
-    <li class="course-row">
-      <div class="identity">
-        <span class="course-name">{{ s.label_display }}</span>
-      </div>
-      <div class="meta">
-        <span class="c-time">{{ s.time_display }}</span>
-        <span class="c-code"><span class="room">{{ s.room|default:"教室未定" }}</span></span>
-      </div>
-      <div class="seats">
-        <span class="seats-num num">{{ s.enrolled }}<span class="of"> / {{ s.capacity }}</span></span>
-        {% if s.enrolled >= s.capacity %}<span class="full-flag">額滿</span>{% endif %}
-        <span class="track" aria-hidden="true"><span style="width:{% widthratio s.enrolled s.capacity 100 %}%"></span></span>
-      </div>
-      <div class="action">
-        {% if user.is_authenticated %}{% include "courses/_action.html" with section=s is_mine=s.is_mine next=request.path %}{% endif %}
-      </div>
-    </li>
+    {% include "courses/_section_row.html" with s=s is_mine=s.is_mine next=request.path in_course_detail=True %}
     {% empty %}
     <li class="empty">這門課還沒開放任何班別。</li>
     {% endfor %}

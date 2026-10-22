@@ -31,7 +31,7 @@ def course_list(request):
     term = Term.current()
     sections = (Section.objects.filter(course__term=term)
                 .select_related("course__teacher")
-                .annotate(enrolled=Count("enrollment")))
+                .annotate(enrolled=Count("enrollments")))
     if q:
         sections = sections.filter(Q(course__name__icontains=q) | Q(course__code__icontains=q)
                                    | Q(course__teacher__name__icontains=q))
@@ -49,7 +49,7 @@ def course_list(request):
 
 def course_detail(request, pk):
     course = get_object_or_404(Course.objects.select_related("teacher"), pk=pk)
-    sections = list(Section.objects.filter(course=course).annotate(enrolled=Count("enrollment")))
+    sections = list(Section.objects.filter(course=course).annotate(enrolled=Count("enrollments")))
     mine = _my_section_ids(request.user)
     for s in sections:
         s.is_mine = s.pk in mine
@@ -91,7 +91,7 @@ def drop(request, pk):
 
 @login_required
 def my_schedule(request):
-    mine = list(Section.objects.filter(enrollment__user=request.user, course__term=Term.current())
+    mine = list(Section.objects.filter(enrollments__user=request.user, course__term=Term.current())
                 .select_related("course__teacher"))
     grid = {(s.day, p): s for s in mine for p in range(s.start_period, s.end_period + 1)}
     last_period = max(8, max((s.end_period for s in mine), default=8))
@@ -100,7 +100,7 @@ def my_schedule(request):
         s.is_mine = True
     return render(request, "courses/schedule.html", {
         "mine": mine, "rows": rows, "days": [label for _, label in Section.DAYS],
-        "total": sum(s.course.credits for s in mine), "max": settings.MAX_CREDITS,
+        "total": sum({s.course_id: s.course.credits for s in mine}.values()), "max": settings.MAX_CREDITS,
     })
 
 
@@ -108,15 +108,19 @@ def my_schedule(request):
 def teaching_courses(request):
     courses = list(Course.objects.filter(teacher__user=request.user, term=Term.current())
                    .select_related("teacher"))
+    by_course = {}
+    for s in (Section.objects.filter(course__teacher__user=request.user, course__term=Term.current())
+              .select_related("course").annotate(enrolled=Count("enrollments"))):
+        by_course.setdefault(s.course_id, []).append(s)
     for c in courses:
-        c.section_list = list(Section.objects.filter(course=c).annotate(enrolled=Count("enrollment")))
+        c.section_list = by_course.get(c.pk, [])
     return render(request, "courses/teaching.html", {"courses": courses})
 
 
 @login_required
 def course_roster(request, pk):
     course = get_object_or_404(Course.objects.select_related("teacher"), pk=pk, teacher__user=request.user)
-    sections = list(Section.objects.filter(course=course).annotate(enrolled=Count("enrollment")))
+    sections = list(Section.objects.filter(course=course).annotate(enrolled=Count("enrollments")))
     enrollments = (Enrollment.objects.filter(section__course=course)
                    .select_related("user", "section").order_by("created"))
     return render(request, "courses/roster.html", {

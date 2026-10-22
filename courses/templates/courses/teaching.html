@@ -10,7 +10,7 @@
 
 <ul class="courses">
   {% for course in courses %}
-  <li class="course-row">
+  <li class="course-row course-row--teach">
     <div class="identity">
       <a class="course-name" href="{% url 'course_roster' course.pk %}">{{ course.name }}</a>
       <p class="course-meta">{{ course.code }} · {{ course.credits }} 學分</p>

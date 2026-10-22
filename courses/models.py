@@ -92,7 +92,7 @@ class Section(models.Model):
     @property
     def enrolled_count(self):
         annotated = getattr(self, "enrolled", None)  # 有 annotate 就用現成的，沒有才查
-        return self.enrollment_set.count() if annotated is None else annotated
+        return self.enrollments.count() if annotated is None else annotated
 
     @property
     def is_full(self):

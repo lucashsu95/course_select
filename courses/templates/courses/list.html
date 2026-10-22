@@ -22,25 +22,7 @@
 </div>
 <ul class="courses">
   {% for s in sections %}
-  <li class="course-row">
-    <div class="identity">
-      <a class="course-name" href="{% url 'course_detail' s.course.pk %}">{{ s.course.name }}</a>
-      <p class="course-meta">{{ s.course.teacher }}</p>
-    </div>
-    <div class="meta">
-      <span class="c-code">{{ s.course.code }}<span class="room">· {{ s.room|default:"教室未定" }}</span></span>
-      <span class="c-time">{{ s.label_display }} · {{ s.time_display }}</span>
-      <span class="c-credits num">{{ s.course.credits }} 學分</span>
-    </div>
-    <div class="seats">
-      <span class="seats-num num">{{ s.enrolled }}<span class="of"> / {{ s.capacity }}</span></span>
-      {% if s.enrolled >= s.capacity %}<span class="full-flag">額滿</span>{% endif %}
-      <span class="track" aria-hidden="true"><span style="width:{% widthratio s.enrolled s.capacity 100 %}%"></span></span>
-    </div>
-    <div class="action">
-      {% if user.is_authenticated %}{% include "courses/_action.html" with section=s is_mine=s.is_mine next=request.get_full_path %}{% endif %}
-    </div>
-  </li>
+  {% include "courses/_section_row.html" with s=s is_mine=s.is_mine next=request.get_full_path %}
   {% empty %}
   <li class="empty">找不到符合的課程。{% if q or day %}<a href="{% url 'course_list' %}">清除篩選</a>{% endif %}</li>
   {% endfor %}

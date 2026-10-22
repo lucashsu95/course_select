@@ -24,7 +24,7 @@ class CourseTestCase(TestCase):
             label=label, day=day, start_period=start, end_period=end, capacity=capacity)
 
     def my_sections(self):
-        return list(Section.objects.filter(enrollment__user=self.u))
+        return list(Section.objects.filter(enrollments__user=self.u))
 
     def mine(self):
         return Enrollment.objects.filter(user=self.u).count()
@@ -32,8 +32,10 @@ class CourseTestCase(TestCase):
 
 class RegisterTests(CourseTestCase):
     def test_enrolls(self):
-        self.assertEqual(register(self.u, self.section("A", "A", 1, 2)).code, "enrolled")
+        a = self.section("A", "A", 1, 2)
+        self.assertEqual(register(self.u, a).code, "enrolled")
         self.assertEqual(self.mine(), 1)
+        self.assertEqual([s.pk for s in self.my_sections()], [a.pk])
 
     def test_already_enrolled_same_section(self):
         a = self.section("A", "A", 1, 2)
@@ -64,7 +66,8 @@ class RegisterTests(CourseTestCase):
         register(self.u, a)
         r = register(self.u, b)
         self.assertEqual(r.code, "conflict")
-        self.assertIn("B", r.message)
+        # 衝堂訊息引用的是「已選」的 A 課 A 班，不是被擋的 B
+        self.assertIn("A 班", r.message)
         self.assertEqual(self.mine(), 1)
 
     def test_conflict_checked_per_section_time(self):
@@ -160,25 +163,25 @@ class TeacherRoleTests(CourseTestCase):
 
     def test_roster_shows_student_name(self):
         self.client.force_login(self.u)
-        r = self.client.get(reverse("course_roster", args=[self.a.pk]))
+        r = self.client.get(reverse("course_roster", args=[self.a.course_id]))
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, "王小明")
         self.assertContains(r, "s@example.com")
 
     def test_other_user_gets_404_on_roster(self):
         self.client.force_login(self.student)
-        self.assertEqual(self.client.get(reverse("course_roster", args=[self.a.pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse("course_roster", args=[self.a.course_id])).status_code, 404)
 
     def test_anonymous_is_redirected_to_login(self):
-        for name, args in [("teaching", []), ("course_roster", [self.a.pk])]:
+        for name, args in [("teaching", []), ("course_roster", [self.a.course_id])]:
             r = self.client.get(reverse(name, args=args))
             self.assertEqual(r.status_code, 302)
             self.assertIn(reverse("google_login"), r["Location"])
         self.assertEqual(self.client.get(reverse("course_list")).status_code, 200)
 
     def test_roster_link_only_for_teacher(self):
-        detail = reverse("course_detail", args=[self.a.pk])
-        roster = reverse("course_roster", args=[self.a.pk])
+        detail = reverse("course_detail", args=[self.a.course_id])
+        roster = reverse("course_roster", args=[self.a.course_id])
         self.assertNotContains(self.client.get(detail), roster)
         self.client.force_login(self.student)
         self.assertNotContains(self.client.get(detail), roster)

@@ -2,7 +2,7 @@ from django.db import migrations, models
 import django.db.models.deletion
 
 
-def _backfill_sections(apps):
+def _backfill_sections(apps, schema_editor):
     """每門既有 Course 產生一個 A 班，時間／教室／名額原樣帶過去。"""
     Course = apps.get_model("courses", "Course")
     Section = apps.get_model("courses", "Section")
@@ -13,7 +13,7 @@ def _backfill_sections(apps):
         )
 
 
-def _repoint_enrollments(apps):
+def _repoint_enrollments(apps, schema_editor):
     """既有加選紀錄對到該課程的 A 班。"""
     Enrollment = apps.get_model("courses", "Enrollment")
     Section = apps.get_model("courses", "Section")
@@ -56,13 +56,14 @@ class Migration(migrations.Migration):
         ),
         migrations.RunPython(_repoint_enrollments, migrations.RunPython.noop),
         # 4. 收緊：Enrollment 去掉 course、section 必填
+        #    注意：RemoveConstraint 必須在 RemoveField 之前——移除欄位會連帶移除引用它的 constraint
+        migrations.RemoveConstraint(model_name="enrollment", name="one_per_course"),
         migrations.RemoveField(model_name="enrollment", name="course"),
         migrations.AlterField(
             model_name="enrollment",
             name="section",
             field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="enrollments", to="courses.section", verbose_name="班別"),
         ),
-        migrations.RemoveConstraint(model_name="enrollment", name="one_per_course"),
         migrations.AddConstraint(
             model_name="enrollment",
             constraint=models.UniqueConstraint(fields=["user", "section"], name="one_per_section"),
@@ -79,11 +80,11 @@ class Migration(migrations.Migration):
             model_name="section",
             constraint=models.CheckConstraint(condition=models.Q(("start_period__gte", 1)) & models.Q(("end_period__gte", models.F("start_period"))), name="section_periods_valid"),
         ),
-        # 6. Course 去掉已移到 Section 的欄位
+        # 6. Course 去掉已移到 Section 的欄位（constraint 先刪，理由同上）
+        migrations.RemoveConstraint(model_name="course", name="course_periods_valid"),
         migrations.RemoveField(model_name="course", name="day"),
         migrations.RemoveField(model_name="course", name="start_period"),
         migrations.RemoveField(model_name="course", name="end_period"),
         migrations.RemoveField(model_name="course", name="room"),
         migrations.RemoveField(model_name="course", name="capacity"),
-        migrations.RemoveConstraint(model_name="course", name="course_periods_valid"),
     ]
