@@ -55,7 +55,7 @@ class Course(models.Model):
     syllabus = models.TextField("課程大綱", blank=True)
     prerequisites = models.ManyToManyField(
         "self", symmetrical=False, related_name="dependent_courses",
-        blank=True, verbose_name="先修課程")  # 1–2 門，clean() 把關
+        blank=True, verbose_name="先修課程")  # 1–2 門，admin 表單 clean_prerequisites() 把關
 
     class Meta:
         ordering = ["code"]
@@ -65,10 +65,6 @@ class Course(models.Model):
 
     def __str__(self):
         return f"{self.code} {self.name}"
-
-    def clean(self):
-        if self.prerequisites.count() > 2:
-            raise ValidationError({"prerequisites": "先修課程最多設 2 門。"})
 
 
 class Section(models.Model):
