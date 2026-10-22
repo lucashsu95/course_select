@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Course, Enrollment, Section, Teacher, Term
+from .models import Course, Enrollment, Section, Teacher, Term, Waitlist
 
 
 @admin.register(Term)
@@ -34,5 +34,12 @@ class SectionAdmin(admin.ModelAdmin):
 @admin.register(Enrollment)
 class EnrollmentAdmin(admin.ModelAdmin):
     list_display = ["user", "section", "created"]
+    list_filter = ["section__course__term"]
+    list_select_related = ["user", "section", "section__course"]
+
+
+@admin.register(Waitlist)
+class WaitlistAdmin(admin.ModelAdmin):
+    list_display = ["user", "section", "queued_at", "promoted_at"]
     list_filter = ["section__course__term"]
     list_select_related = ["user", "section", "section__course"]

@@ -6,8 +6,8 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Course, Enrollment, Section, Teacher, Term
-from .services import register
+from .models import Course, Enrollment, Section, Teacher, Term, Waitlist
+from .services import cancel_waitlist, drop_enrollment, register
 
 
 class CourseTestCase(TestCase):
@@ -79,13 +79,15 @@ class RegisterTests(CourseTestCase):
         register(self.u, a1)
         self.assertEqual(register(self.u, b1).code, "enrolled")
 
-    def test_full_is_rejected_per_section(self):
+    def test_full_section_goes_to_waitlist(self):
         a = self.section("A", "A", 1, 2, capacity=1)
         b = self.section("A", "B", 4, 5)
         Enrollment.objects.create(user=get_user_model().objects.create_user("v"), section=a)
-        self.assertEqual(register(self.u, a).code, "full")  # A 班滿
+        self.assertEqual(register(self.u, a).code, "waitlisted")  # A 班滿 → 進等待名單
         self.assertEqual(register(self.u, b).code, "enrolled")  # B 班不受影響
         self.assertEqual(self.mine(), 1)
+        # 選進 B 班後，同課的等待紀錄自動清掉
+        self.assertFalse(Waitlist.objects.filter(user=self.u, section=a).exists())
 
     @override_settings(MAX_CREDITS=3)
     def test_credit_limit_is_per_term(self):
@@ -306,3 +308,68 @@ class WindowTests(CourseTestCase):
         register(self.u, a)
         self._closed_earlier()
         self.assertEqual(self.client.get(reverse("my_schedule")).status_code, 200)
+class WaitlistTests(CourseTestCase):
+    def setUp(self):
+        super().setUp()
+        self.a = self.section("A", "A", 1, 2, capacity=1)
+        self.v = get_user_model().objects.create_user("v")
+        Enrollment.objects.create(user=self.v, section=self.a)  # A 班額滿
+
+    def test_waitlisted_with_position(self):
+        r = register(self.u, self.a)
+        self.assertEqual(r.code, "waitlisted")
+        self.assertIn("第 1 位", r.message)
+
+    def test_already_waitlisted_shows_position(self):
+        register(self.u, self.a)
+        r = register(self.u, self.a)
+        self.assertEqual(r.code, "already_waitlisted")
+        self.assertIn("第 1 位", r.message)
+
+    def test_promotes_on_drop(self):
+        register(self.u, self.a)
+        drop_enrollment(self.v, self.a)
+        self.assertTrue(Enrollment.objects.filter(user=self.u, section=self.a).exists())
+        self.assertIsNotNone(Waitlist.objects.get(user=self.u, section=self.a).promoted_at)
+
+    def test_no_skip_order(self):
+        first = get_user_model().objects.create_user("w1")
+        register(first, self.a)   # 第 1 位
+        register(self.u, self.a)  # 第 2 位
+        drop_enrollment(self.v, self.a)      # 只開一個位置
+        self.assertTrue(Enrollment.objects.filter(user=first, section=self.a).exists())
+        self.assertFalse(Enrollment.objects.filter(user=self.u, section=self.a).exists())
+        self.assertEqual(Waitlist.objects.get(user=self.u, section=self.a).position, 1)
+
+    def test_cancel_wait(self):
+        register(self.u, self.a)
+        self.assertTrue(cancel_waitlist(self.u, self.a))
+        self.assertFalse(cancel_waitlist(self.u, self.a))
+        self.assertFalse(Waitlist.objects.filter(user=self.u).exists())
+
+    def test_cancel_wait_via_view(self):
+        self.client.force_login(self.u)
+        register(self.u, self.a)
+        r = self.client.post(reverse("cancel_wait", args=[self.a.pk]), follow=True)
+        self.assertContains(r, "已取消等待")
+        self.assertFalse(Waitlist.objects.filter(user=self.u).exists())
+
+    def test_enrolling_other_section_clears_waitlist(self):
+        b = self.section("A", "B", 4, 5)
+        register(self.u, self.a)  # 等 A 班
+        self.assertEqual(register(self.u, b).code, "enrolled")
+        self.assertFalse(Waitlist.objects.filter(user=self.u).exists())
+
+    def test_cannot_wait_when_enrolled_same_course(self):
+        b = self.section("A", "B", 4, 5)
+        register(self.u, b)  # 已選 B 班
+        r = register(self.u, self.a)  # A 班額滿
+        self.assertEqual(r.code, "already")
+        self.assertFalse(Waitlist.objects.filter(user=self.u).exists())
+
+    def test_banner_shown_once(self):
+        self.client.force_login(self.u)
+        register(self.u, self.a)
+        drop_enrollment(self.v, self.a)
+        self.assertContains(self.client.get(reverse("my_schedule")), "你已遞補進")
+        self.assertNotContains(self.client.get(reverse("my_schedule")), "你已遞補進")

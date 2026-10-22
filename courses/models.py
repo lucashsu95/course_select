@@ -132,3 +132,26 @@ class Enrollment(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.section}"
+
+
+class Waitlist(models.Model):
+    """額滿班別的等待名單：依 queued_at 順序，退選釋出名額時自動遞補。"""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="waitlists")
+    section = models.ForeignKey(Section, on_delete=models.CASCADE, related_name="waitlists", verbose_name="班別")
+    queued_at = models.DateTimeField("排隊時間", auto_now_add=True)
+    promoted_at = models.DateTimeField("遞補時間", null=True, blank=True)
+    promoted_seen_at = models.DateTimeField("遞補通知已讀", null=True, blank=True)
+
+    class Meta:
+        ordering = ["queued_at"]
+        verbose_name = "等待名單"
+        constraints = [models.UniqueConstraint(fields=["user", "section"], name="waitlist_one_per_section")]
+
+    def __str__(self):
+        return f"{self.user} 等 {self.section}"
+
+    @property
+    def position(self):
+        """目前順位（從 1 起，只算還沒遞補的）。"""
+        return self.section.waitlists.filter(promoted_at__isnull=True, queued_at__lt=self.queued_at).count() + 1
