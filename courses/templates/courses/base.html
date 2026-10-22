@@ -46,8 +46,10 @@
       </svg>
       選課系統</a>
     <details class="menu">
-      <summary>選單</summary>
-      {% include "courses/_nav.html" %}
+      <summary><span class="open-label">選單</span><span class="close-label">關閉</span></summary>
+      <div class="sheet">
+        {% include "courses/_nav.html" %}
+      </div>
     </details>
   </header>
 

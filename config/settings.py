@@ -59,3 +59,6 @@ SOCIALACCOUNT_PROVIDERS = {"google": {
 }}
 
 MAX_CREDITS = 25  # 學分上限
+# --- ngrok：讓 Django 知道外面是 https，並信任 ngrok 網域的表單 ---
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+CSRF_TRUSTED_ORIGINS = ["https://*.ngrok-free.app", "https://*.ngrok-free.dev"]

@@ -37,6 +37,64 @@
         </div>
       </dd>
     </dl>
+
+    <div class="when">
+      <p class="when-label">每週上課時段</p>
+      {# shortcut: 迷你週表固定以 10 節為比例，超過 10 節的課會裁切，真的需要時改吃 last_period #}
+      <div class="mini-week" aria-hidden="true">
+        {% for d, label in days %}
+        <div class="mini-day{% if course.day == d %} on{% endif %}">
+          <span class="mini-track">{% if course.day == d %}<span class="mini-block" style="top:{% widthratio course.start_period|add:"-1" 10 100 %}%;height:{% widthratio course.periods 10 100 %}%"></span>{% endif %}</span>
+          <span class="mini-name">{{ label|slice:"1:" }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
   </aside>
 </div>
+
+<section class="comments" id="comments">
+  <div class="comments-head">
+    <h2>留言</h2><span class="num">{{ comments|length }} 則</span>
+  </div>
+
+  {% if user.is_authenticated %}
+  <form method="post" action="{% url 'add_comment' course.pk %}" class="comment-form">{% csrf_token %}
+    <label class="sr-only" for="comment-body">留言內容</label>
+    <textarea id="comment-body" name="body" maxlength="{{ comment_max }}" required
+              placeholder="問課程內容、loading、評分方式…"></textarea>
+    <div class="row">
+      <span class="hint">最多 {{ comment_max }} 字</span>
+      <button class="btn btn-primary">送出留言</button>
+    </div>
+  </form>
+  {% else %}
+  <p class="login-hint">登入後才能留言 · <a href="{% url 'google_login' %}">以 Google 登入</a></p>
+  {% endif %}
+
+  <ol class="comment-list">
+    {% for c in comments %}
+    <li class="comment">
+      <div class="comment-head">
+        <span class="comment-author">{{ c.author_name }}</span>
+        <time class="comment-time" datetime="{{ c.created|date:'c' }}">{{ c.created|date:"Y-m-d H:i" }}</time>
+      </div>
+      <p class="comment-body">{{ c.body|linebreaksbr }}</p>
+    </li>
+    {% empty %}
+    <li class="comment-empty">還沒有人留言。</li>
+    {% endfor %}
+  </ol>
+</section>
+
+{% if related %}
+<section class="related">
+  <h2>{{ course.teacher }} 的其他課程</h2>
+  <ul class="courses">
+    {% for c in related %}
+      {% include "courses/_row.html" with course=c next=request.path hide_teacher=1 %}
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
 {% endblock %}

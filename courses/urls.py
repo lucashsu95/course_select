@@ -6,5 +6,6 @@ urlpatterns = [
     path("course/<int:pk>/", views.course_detail, name="course_detail"),
     path("course/<int:pk>/enroll/", views.enroll, name="enroll"),
     path("course/<int:pk>/drop/", views.drop, name="drop"),
+    path("course/<int:pk>/comment/", views.add_comment, name="add_comment"),
     path("my/", views.my_schedule, name="my_schedule"),
 ]

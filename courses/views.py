@@ -6,7 +6,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
-from .models import Course, Enrollment, Term
+from .models import Comment, Course, Enrollment, Term
 from .services import register
 
 
@@ -52,8 +52,25 @@ def course_detail(request, pk):
         c.is_mine = c.pk in mine
     return render(request, "courses/detail.html", {
         "course": course, "is_mine": course.pk in mine, "related": related,
+        "comments": course.comments.select_related("user"),
+        "comment_max": Comment.MAX_LENGTH,
         "days": Course.DAYS,
     })
+
+
+@login_required
+@require_POST
+def add_comment(request, pk):
+    course = get_object_or_404(Course, pk=pk)
+    body = request.POST.get("body", "").strip()
+    if not body:
+        messages.error(request, "留言不能是空白。")
+    elif len(body) > Comment.MAX_LENGTH:
+        messages.error(request, f"留言最多 {Comment.MAX_LENGTH} 字。")
+    else:
+        Comment.objects.create(course=course, user=request.user, body=body)
+        messages.success(request, "已留言。")
+    return _redirect_next(request, "course_detail", pk)
 
 
 @login_required
