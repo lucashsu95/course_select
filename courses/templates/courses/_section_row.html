@@ -20,9 +20,10 @@
   <div class="seats">
     <span class="seats-num num">{{ s.enrolled }}<span class="of"> / {{ s.capacity }}</span></span>
     {% if s.is_full %}<span class="full-flag">額滿</span>{% endif %}
+    {% if s.waitlist_count %}<span class="wait-flag">{{ s.waitlist_count }} 人等待</span>{% endif %}
     <span class="track" aria-hidden="true"><span style="width:{% widthratio s.enrolled s.capacity 100 %}%"></span></span>
   </div>
   <div class="action">
-    {% if user.is_authenticated %}{% include "courses/_action.html" with section=s is_mine=is_mine next=next window_state=window.state %}{% endif %}
+    {% if user.is_authenticated %}{% include "courses/_action.html" with section=s is_mine=is_mine next=next is_waiting=s.is_waiting wait_position=s.wait_position window_state=window.state %}{% endif %}
   </div>
 </li>

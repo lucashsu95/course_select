@@ -1,9 +1,10 @@
 from datetime import timedelta
 
+from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from courses.models import Course, Section, Teacher, Term
+from courses.models import Course, Enrollment, Section, Teacher, Term
 
 # (課號, 課名, 老師, 學分, 大綱, [(班別, 星期, 起始, 結束, 教室, 名額), ...])
 DATA = [
@@ -33,7 +34,7 @@ DATA = [
      [("A", 4, 6, 7, "E101", 35)]),
     ("PE101", "游泳", "張大偉", 1,
      "基礎泳姿與水中安全。",
-     [("A", 5, 6, 7, "體育館", 30), ("B", 5, 8, 9, "體育館", 30)]),
+     [("A", 5, 6, 7, "體育館", 30), ("B", 5, 8, 9, "體育館", 3)]),
     ("GE101", "設計思考", "陳美玲", 2,
      "以小組專案練習同理、發想與原型。",
      [("A", 2, 6, 7, "E202", 24)]),
@@ -57,7 +58,12 @@ class Command(BaseCommand):
             for label, day, s, e, room, cap in sections:
                 Section.objects.update_or_create(course=course, label=label,
                                                   defaults=dict(day=day, start_period=s, end_period=e, room=room, capacity=cap))
-        self.stdout.write(f"已載入 {len(DATA)} 門課到 {term.code}（選課加選中）")
+        # 等待名單演示：PE101 B 班（容量 3）額滿，加選會進等待名單
+        full = Section.objects.get(course__term=term, course__code="PE101", label="B")
+        for i in range(1, full.capacity + 1):
+            u, _ = get_user_model().objects.get_or_create(username=f"demo_fill_{i}")
+            Enrollment.objects.get_or_create(user=u, section=full)
+        self.stdout.write(f"已載入 {len(DATA)} 門課到 {term.code}（選課加選中、PE101 B 已額滿）")
         future, _ = Term.objects.update_or_create(code="114-2", defaults={
             "is_current": False,
             "enroll_open": now + timedelta(days=30),   # 尚未開放（admin 可演示）

@@ -54,6 +54,15 @@
   </header>
 
   <main class="canvas">
+    {% if waitlist_banner %}
+    <div class="notice notice-waitlist" role="status">
+      🎉 有位置空出：你已遞補進 <strong>{% for n in waitlist_banner %}{{ n }}{% if not forloop.last %}、{% endif %}{% endfor %}</strong>，去「我的課表」看看吧。
+      <form method="post" action="{% url 'ack_promotion' %}" class="inline-form">{% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button class="btn btn-secondary" type="submit">知道了</button>
+      </form>
+    </div>
+    {% endif %}
     {% for m in messages %}<div class="notice notice-{{ m.tags }}" role="status">{{ m }}</div>{% endfor %}
     {% block content %}{% endblock %}
   </main>

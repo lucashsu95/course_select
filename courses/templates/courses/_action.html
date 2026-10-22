@@ -1,8 +1,13 @@
-{# 加選 / 退選按鈕：需要 section、is_mine、next(可選)、primary(可選) #}
+{# 加選 / 退選 / 取消等待按鈕：需要 section、is_mine、next(可選)、primary(可選)、is_waiting/wait_position(可選) #}
 {% if is_mine %}
   <form method="post" action="{% url 'drop' section.pk %}" class="inline-form">{% csrf_token %}
     <input type="hidden" name="next" value="{{ next }}">
     <button class="btn btn-secondary">退選</button></form>
+{% elif is_waiting %}
+  <span class="wait-flag">等待中（第 {{ wait_position }} 位）</span>
+  <form method="post" action="{% url 'cancel_wait' section.pk %}" class="inline-form">{% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <button class="btn btn-secondary">取消等待</button></form>
 {% elif window_state == "" or window_state == "open" %}
   <form method="post" action="{% url 'enroll' section.pk %}" class="inline-form">{% csrf_token %}
     <input type="hidden" name="next" value="{{ next }}">

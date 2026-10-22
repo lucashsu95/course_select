@@ -3,11 +3,12 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
-from .models import Course, Enrollment, Section, Term
-from .services import register
+from .models import Course, Enrollment, Section, Term, Waitlist
+from .services import cancel_waitlist, drop_enrollment, register
 
 
 def _my_section_ids(user):
@@ -38,6 +39,14 @@ def _window_context(term):
     return {"state": state, "text": text}
 
 
+def _wait_positions(user):
+    """該使用者還在排隊的班別：{section_id: 順位}。"""
+    if not user.is_authenticated:
+        return {}
+    return {w.section_id: w.position for w in
+            Waitlist.objects.filter(user=user, promoted_at__isnull=True)}
+
+
 def course_list(request):
     """課程列表：每行是一個班別。"""
     q = request.GET.get("q", "").strip()
@@ -45,16 +54,21 @@ def course_list(request):
     term = Term.current()
     sections = (Section.objects.filter(course__term=term)
                 .select_related("course__teacher")
-                .annotate(enrolled=Count("enrollments")))
+                .annotate(enrolled=Count("enrollments", distinct=True),
+                          waitlist_count=Count("waitlists", distinct=True,
+                                               filter=Q(waitlists__promoted_at__isnull=True))))
     if q:
         sections = sections.filter(Q(course__name__icontains=q) | Q(course__code__icontains=q)
                                    | Q(course__teacher__name__icontains=q))
     if day.isdigit():
         sections = sections.filter(day=int(day))
     mine = _my_section_ids(request.user)
+    waiting = _wait_positions(request.user)
     sections = list(sections)
     for s in sections:
         s.is_mine = s.pk in mine
+        s.is_waiting = s.pk in waiting
+        s.wait_position = waiting.get(s.pk)
     full_count = sum(1 for s in sections if s.is_full)
     return render(request, "courses/list.html", {
         "sections": sections, "q": q, "day": day, "days": Section.DAYS, "full_count": full_count,
@@ -64,10 +78,16 @@ def course_list(request):
 
 def course_detail(request, pk):
     course = get_object_or_404(Course.objects.select_related("teacher"), pk=pk)
-    sections = list(Section.objects.filter(course=course).annotate(enrolled=Count("enrollments")))
+    sections = list(Section.objects.filter(course=course)
+                    .annotate(enrolled=Count("enrollments", distinct=True),
+                              waitlist_count=Count("waitlists", distinct=True,
+                                                   filter=Q(waitlists__promoted_at__isnull=True))))
     mine = _my_section_ids(request.user)
+    waiting = _wait_positions(request.user)
     for s in sections:
         s.is_mine = s.pk in mine
+        s.is_waiting = s.pk in waiting
+        s.wait_position = waiting.get(s.pk)
     my_section = next((s for s in sections if s.is_mine), None)
     # 匿名使用者的 id 與 teacher.user_id 都可能是 None，先擋掉未登入
     is_teacher = request.user.is_authenticated and course.teacher.user_id == request.user.id
@@ -86,7 +106,7 @@ def enroll(request, pk):
     result = register(request.user, section)
     if result.ok:
         messages.success(request, result.message)
-    elif result.code == "already":
+    elif result.code in ("already", "waitlisted", "already_waitlisted"):
         messages.info(request, result.message)
     elif result.code in ("not_open", "closed"):
         messages.warning(request, result.message)
@@ -99,12 +119,32 @@ def enroll(request, pk):
 @require_POST
 def drop(request, pk):
     section = get_object_or_404(Section.objects.select_related("course"), pk=pk)
-    deleted, _ = Enrollment.objects.filter(user=request.user, section_id=pk).delete()
-    if deleted:
+    if drop_enrollment(request.user, section):
         messages.success(request, f"已退選「{section.course.name} {section.label_display}」。")
     else:
         messages.info(request, "你沒有選這個班別。")
     return _redirect_next(request, "my_schedule")
+
+
+@login_required
+@require_POST
+def cancel_wait(request, pk):
+    section = get_object_or_404(Section.objects.select_related("course"), pk=pk)
+    if cancel_waitlist(request.user, section):
+        messages.success(request, f"已取消等待「{section.course.name} {section.label_display}」。")
+    else:
+        messages.info(request, "你沒有在等這個班別。")
+    return _redirect_next(request, "my_schedule")
+
+
+@login_required
+@require_POST
+def ack_promotion(request):
+    """明確確認遞補通知（banner 的「知道了」）；GET 不寫庫。"""
+    Waitlist.objects.filter(user=request.user,
+                            promoted_at__isnull=False,
+                            promoted_seen_at__isnull=True).update(promoted_seen_at=timezone.now())
+    return _redirect_next(request, "course_list")
 
 
 @login_required
