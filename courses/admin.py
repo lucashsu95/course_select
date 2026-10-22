@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Course, Enrollment, Teacher, Term
+from .models import Comment, Course, Enrollment, Teacher, Term
 
 
 @admin.register(Term)
@@ -24,4 +24,12 @@ class CourseAdmin(admin.ModelAdmin):
 class EnrollmentAdmin(admin.ModelAdmin):
     list_display = ["user", "course", "created"]
     list_filter = ["course__term", "course"]
+    list_select_related = ["user", "course"]
+
+
+@admin.register(Comment)
+class CommentAdmin(admin.ModelAdmin):
+    list_display = ["user", "course", "body", "created"]
+    list_filter = ["course__term", "course"]
+    search_fields = ["body", "user__username"]
     list_select_related = ["user", "course"]
