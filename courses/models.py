@@ -1,7 +1,6 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.utils import timezone
 
 
 class Teacher(models.Model):
@@ -34,16 +33,6 @@ class Term(models.Model):
     @property
     def has_window(self):
         return bool(self.enroll_open or self.enroll_close)
-
-    @property
-    def enrollment_state(self):
-        """選課階段：not_open / open / closed（兩欄皆空＝永遠 open）。"""
-        now = timezone.now()
-        if self.enroll_open and now < self.enroll_open:
-            return "not_open"
-        if self.enroll_close and now > self.enroll_close:
-            return "closed"
-        return "open"
 
 
 class Course(models.Model):

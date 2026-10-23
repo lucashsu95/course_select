@@ -9,7 +9,8 @@ def apply_actions(standing, sections, window_state="open"):
     """為每個班別設定 s.action（cancel_wait 時另設 s.wait_position）。
 
     standing 是該使用者在本學期的 Standing；window_state 是
-    Term.enrollment_state 的三態，無時間窗的學期傳 "open"。
+    window_gate 的三態（not_open / open / closed）；
+    未知狀態丟 ValueError（不隱式當成某一種 policy）。
     """
     enrolled = standing.section_ids
     for s in sections:
@@ -22,5 +23,8 @@ def apply_actions(standing, sections, window_state="open"):
             s.action = "enroll"
         elif window_state == "not_open":
             s.action = "blocked_not_open"
-        else:
+        elif window_state == "closed":
             s.action = "blocked_closed"
+        else:
+            # 三態 vocabulary 只由 window_gate 產生；未知狀態＝上游出錯，不能隱式猜 policy
+            raise ValueError(f"未知的選課時間窗狀態：{window_state!r}")
