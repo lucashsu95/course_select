@@ -610,3 +610,17 @@ class EmptyDatabaseTests(TestCase):
         u = get_user_model().objects.create_user("u")
         self.client.force_login(u)
         self.assertEqual(self.client.get(reverse("my_schedule")).status_code, 200)
+
+
+class ScheduleTotalTests(CourseTestCase):
+    def test_same_course_two_sections_counts_credits_once(self):
+        # admin 手動造成的狀態（service 層平常會擋同課兩班）：
+        # 總學分按課去重，3 學分只算一次
+        a = self.section("A", "A", 1, 2)
+        b = self.section("A", "B", 4, 5)
+        Enrollment.objects.create(user=self.u, section=a)
+        Enrollment.objects.create(user=self.u, section=b)
+        self.client.force_login(self.u)
+        r = self.client.get(reverse("my_schedule"))
+        self.assertContains(r, 'num">3</span> / <span class="num">25</span>')
+        self.assertNotContains(r, 'num">6</span> / <span class="num">25</span>')
