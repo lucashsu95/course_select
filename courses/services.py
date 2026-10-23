@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from .models import Enrollment, Section, Waitlist
 from .standing import completed_codes, enrolled_sections, total_credits
+from .window import window_gate
 
 
 def missing_prereqs(course, passed):
@@ -45,11 +46,9 @@ def register(user, section):
         section = Section.objects.select_for_update().select_related("course__term").get(pk=section.pk)
         course = section.course
         term = course.term
-        now = timezone.now()
-        if term.enroll_open and now < term.enroll_open:
-            return Result("not_open", f"選課 {term.enroll_open:%Y/%m/%d %H:%M} 開放。")
-        if term.enroll_close and now > term.enroll_close:
-            return Result("closed", f"選課已截止（{term.enroll_close:%Y/%m/%d %H:%M} 截止）。")
+        state, message = window_gate(term)
+        if state != "open":
+            return Result(state, message)
         # 該使用者在本學期的選課狀態（同課、衝堂、學分都從這裡讀）；
         # 只取 sections 與已修課號，不付沒人讀的等待順位掃描成本
         sections = enrolled_sections(user, term)

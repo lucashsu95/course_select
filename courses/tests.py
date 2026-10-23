@@ -694,3 +694,12 @@ class WindowGateTests(TestCase):
         state, msg = window_gate(self.term)
         self.assertEqual(state, "closed")
         self.assertIn("截止", msg)
+
+    def test_apply_actions_unknown_window_state_raises(self):
+        # 三態 vocabulary 只由 window_gate 產生；未知狀態代表上游出錯，
+        # 不能隱式當成某一種 policy（舊 code 的 else 會一律畫成「已截止」）
+        from .rows import apply_actions
+        from .standing import get_standing
+        standing = get_standing(self.u, self.term)
+        with self.assertRaises(ValueError):
+            apply_actions(standing, [self.s], "bogus")

@@ -11,6 +11,7 @@ from .models import Course, Enrollment, Section, Term, Waitlist
 from .rows import apply_actions
 from .services import cancel_waitlist, drop_enrollment, register
 from .standing import get_standing
+from .window import window_gate
 
 
 def _redirect_next(request, fallback, *args):
@@ -25,7 +26,7 @@ def _window_context(term):
     """選課時間窗狀態列；兩欄皆空（不限）回 None，頁面不顯示。"""
     if not term.has_window:
         return None
-    state = term.enrollment_state
+    state, _ = window_gate(term)
     if state == "not_open":
         text = f"選課 {term.enroll_open:%Y/%m/%d %H:%M} 開放"
     elif state == "closed":
@@ -59,7 +60,7 @@ def course_list(request):
             sections = sections.filter(start_period__lte=hi)
     standing = get_standing(request.user, term)
     sections = list(sections)
-    apply_actions(standing, sections, term.enrollment_state)
+    apply_actions(standing, sections, window_gate(term)[0])
     for s in sections:
         s.prereq_list = [(c, c.code in standing.passed) for c in sorted(s.course.prerequisites.all(), key=lambda c: c.code)]
     full_count = sum(1 for s in sections if s.is_full)
@@ -78,7 +79,7 @@ def course_detail(request, pk):
                               waitlist_count=Count("waitlists", distinct=True,
                                                    filter=Q(waitlists__promoted_at__isnull=True))))
     standing = get_standing(request.user, course.term)
-    apply_actions(standing, sections, course.term.enrollment_state)
+    apply_actions(standing, sections, window_gate(course.term)[0])
     my_section = next((s for s in sections if s.action == "drop"), None)
     # 匿名使用者的 id 與 teacher.user_id 都可能是 None，先擋掉未登入
     is_teacher = request.user.is_authenticated and course.teacher.user_id == request.user.id
