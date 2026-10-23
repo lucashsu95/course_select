@@ -10,15 +10,7 @@ from django.views.decorators.http import require_POST
 from .models import Course, Enrollment, Section, Term, Waitlist
 from .rows import apply_actions
 from .services import cancel_waitlist, drop_enrollment, register
-
-
-def _completed_codes(user):
-    """過去學期有過加選紀錄的課號集合（＝「修過」）。"""
-    if not user.is_authenticated:
-        return set()
-    return set(Enrollment.objects.filter(
-        user=user, section__course__term__is_current=False)
-        .values_list("section__course__code", flat=True))
+from .standing import get_standing
 
 
 def _redirect_next(request, fallback, *args):
@@ -65,11 +57,11 @@ def course_list(request):
         sections = sections.filter(start_period__gte=lo)
         if hi:
             sections = sections.filter(start_period__lte=hi)
-    completed = _completed_codes(request.user)
+    standing = get_standing(request.user, term)
     sections = list(sections)
-    apply_actions(request.user, sections, term.enrollment_state)
+    apply_actions(standing, sections, term.enrollment_state)
     for s in sections:
-        s.prereq_list = [(c, c.code in completed) for c in sorted(s.course.prerequisites.all(), key=lambda c: c.code)]
+        s.prereq_list = [(c, c.code in standing.passed) for c in sorted(s.course.prerequisites.all(), key=lambda c: c.code)]
     full_count = sum(1 for s in sections if s.is_full)
     return render(request, "courses/list.html", {
         "sections": sections, "q": q, "day": day, "slot": slot,
@@ -85,14 +77,14 @@ def course_detail(request, pk):
                     .annotate(enrolled=Count("enrollments", distinct=True),
                               waitlist_count=Count("waitlists", distinct=True,
                                                    filter=Q(waitlists__promoted_at__isnull=True))))
-    apply_actions(request.user, sections, course.term.enrollment_state)
+    standing = get_standing(request.user, course.term)
+    apply_actions(standing, sections, course.term.enrollment_state)
     my_section = next((s for s in sections if s.action == "drop"), None)
     # 匿名使用者的 id 與 teacher.user_id 都可能是 None，先擋掉未登入
     is_teacher = request.user.is_authenticated and course.teacher.user_id == request.user.id
     related = list(Course.objects.filter(teacher=course.teacher, term=course.term).exclude(pk=pk)
                    .select_related("teacher")[:4])
-    completed = _completed_codes(request.user)
-    prereqs = [(c, c.code in completed) for c in sorted(course.prerequisites.all(), key=lambda c: c.code)]
+    prereqs = [(c, c.code in standing.passed) for c in sorted(course.prerequisites.all(), key=lambda c: c.code)]
     return render(request, "courses/detail.html", {
         "course": course, "sections": sections, "my_section": my_section, "is_teacher": is_teacher, "related": related,
         "window": _window_context(course.term),
@@ -150,16 +142,16 @@ def ack_promotion(request):
 
 @login_required
 def my_schedule(request):
-    mine = list(Section.objects.filter(enrollments__user=request.user, course__term=Term.current())
-                .select_related("course__teacher"))
+    # shortcut: 課表只用到 sections 與 credits；standing 的 waiting、passed 是這頁多付的掃描
+    standing = get_standing(request.user, Term.current())
+    mine = list(standing.sections)
     grid = {(s.day, p): s for s in mine for p in range(s.start_period, s.end_period + 1)}
     last_period = max(8, max((s.end_period for s in mine), default=8))
     rows = [(p, [grid.get((d, p)) for d, _ in Section.DAYS]) for p in range(1, last_period + 1)]
-    # mine 裡的班別必定已加選 → action 必定是 drop，時間窗對這支 view 沒有作用
-    apply_actions(request.user, mine)
+    apply_actions(standing, mine)
     return render(request, "courses/schedule.html", {
         "mine": mine, "rows": rows, "days": [label for _, label in Section.DAYS],
-        "total": sum({s.course_id: s.course.credits for s in mine}.values()), "max": settings.MAX_CREDITS,
+        "total": standing.credits, "max": settings.MAX_CREDITS,
     })
 
 

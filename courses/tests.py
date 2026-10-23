@@ -610,3 +610,43 @@ class EmptyDatabaseTests(TestCase):
         u = get_user_model().objects.create_user("u")
         self.client.force_login(u)
         self.assertEqual(self.client.get(reverse("my_schedule")).status_code, 200)
+
+
+class ScheduleTotalTests(CourseTestCase):
+    def test_same_course_two_sections_counts_credits_once(self):
+        # admin 手動造成的狀態（service 層平常會擋同課兩班）：
+        # 總學分按課去重，3 學分只算一次
+        a = self.section("A", "A", 1, 2)
+        b = self.section("A", "B", 4, 5)
+        Enrollment.objects.create(user=self.u, section=a)
+        Enrollment.objects.create(user=self.u, section=b)
+        self.client.force_login(self.u)
+        r = self.client.get(reverse("my_schedule"))
+        # 斷言資料而非 markup，避免模板改版時測試假紅
+        self.assertEqual(r.context["total"], 3)
+
+
+class StandingScopeTests(TestCase):
+    """standing 各欄的範圍：waiting 只取傳入的學期（「已修」的跨學期定義由 PrereqTests 覆蓋）。"""
+
+    def setUp(self):
+        self.term = Term.objects.create(code="114-1", is_current=True)
+        self.past = Term.objects.create(code="113-2", is_current=False)
+        self.teacher = Teacher.objects.create(name="T")
+        self.u = get_user_model().objects.create_user("u")
+
+    def section(self, code, label, start, end, term=None):
+        return Section.objects.create(
+            course=Course.objects.create(term=term or self.term, code=code, name=code,
+                                         teacher=self.teacher),
+            label=label, day=1, start_period=start, end_period=end, capacity=10)
+
+    def test_waiting_from_other_term_not_in_standing(self):
+        from .standing import get_standing
+        old = self.section("HIST100", "A", 1, 2, term=self.past)
+        new = self.section("HIST101", "A", 3, 4)
+        Waitlist.objects.create(user=self.u, section=old)
+        Waitlist.objects.create(user=self.u, section=new)
+        standing = get_standing(self.u, self.term)
+        # position 是依 queued_at 算的 property，這裡只斷言範圍（哪些班別出現在 standing）
+        self.assertEqual(set(standing.waiting), {new.pk})
