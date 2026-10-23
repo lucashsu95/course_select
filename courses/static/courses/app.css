@@ -228,8 +228,6 @@ h2 { font-size: var(--fs-section); font-weight: 600; }
 .btn-primary:hover { background: #000; }
 .btn-secondary { background: var(--surface); border-color: var(--control); color: var(--text); }
 .btn-secondary:hover { background: var(--raised); border-color: var(--muted); }
-.btn-quiet { background: transparent; color: var(--muted); padding: 0 10px; }
-.btn-quiet:hover { color: var(--text); background: var(--raised); }
 .btn:active { transform: translateY(1px); }
 .inline-form { margin: 0; display: inline-flex; }
 

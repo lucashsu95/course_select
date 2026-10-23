@@ -177,8 +177,6 @@ def my_schedule(request):
     grid = {(s.day, p): s for s in mine for p in range(s.start_period, s.end_period + 1)}
     last_period = max(8, max((s.end_period for s in mine), default=8))
     rows = [(p, [grid.get((d, p)) for d, _ in Section.DAYS]) for p in range(1, last_period + 1)]
-    for s in mine:
-        s.is_mine = True
     return render(request, "courses/schedule.html", {
         "mine": mine, "rows": rows, "days": [label for _, label in Section.DAYS],
         "total": sum({s.course_id: s.course.credits for s in mine}.values()), "max": settings.MAX_CREDITS,
@@ -201,7 +199,7 @@ def teaching_courses(request):
 @login_required
 def course_roster(request, pk):
     course = get_object_or_404(Course.objects.select_related("teacher"), pk=pk, teacher__user=request.user)
-    sections = list(Section.objects.filter(course=course).annotate(enrolled=Count("enrollments")))
+    sections = list(Section.objects.filter(course=course))
     enrollments = (Enrollment.objects.filter(section__course=course)
                    .select_related("user", "section").order_by("created"))
     return render(request, "courses/roster.html", {
