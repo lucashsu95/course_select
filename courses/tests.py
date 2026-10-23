@@ -332,6 +332,29 @@ class WaitlistTests(CourseTestCase):
         self.assertEqual(r.code, "already_waitlisted")
         self.assertIn("第 1 位", r.message)
 
+    def test_waiting_positions_batch_matches_row_positions(self):
+        # 批量版（standing）與逐行版（property）的順位必須一致——UI 與訊息同一來源
+        from .standing import waiting_positions
+        b = self.section("B", "A", 3, 4, capacity=1)
+        w1 = get_user_model().objects.create_user("w1")
+        Enrollment.objects.create(user=w1, section=b)  # B 班額滿
+        register(self.u, self.a)   # a 班第 1 位
+        register(self.u, b)        # b 班第 1 位
+        register(w1, self.a)       # a 班第 2 位
+        positions = waiting_positions(self.u, self.term)
+        self.assertEqual(positions, {self.a.pk: 1, b.pk: 1})
+        for wait in Waitlist.objects.filter(user=self.u, promoted_at__isnull=True):
+            self.assertEqual(positions[wait.section_id], wait.position)
+
+    def test_tied_queued_at_share_position(self):
+        # 兩列排隊時間相同：依「只數更早的列」規則，兩列拿到同一順位
+        w1 = get_user_model().objects.create_user("w1")
+        r1 = Waitlist.objects.create(user=self.u, section=self.a)
+        r2 = Waitlist.objects.create(user=w1, section=self.a)
+        Waitlist.objects.filter(pk__in=[r1.pk, r2.pk]).update(queued_at=timezone.now())
+        self.assertEqual(r1.position, r2.position)
+        self.assertEqual(r1.position, 1)
+
     def test_promotes_on_drop(self):
         register(self.u, self.a)
         drop_enrollment(self.v, self.a)
