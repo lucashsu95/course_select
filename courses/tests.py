@@ -456,6 +456,21 @@ class WaitlistTests(CourseTestCase):
         self.assertFalse(Enrollment.objects.filter(user=self.u, section=self.a).exists())
         # u 的等待列已被移出
         self.assertFalse(Waitlist.objects.filter(user=self.u, section=self.a).exists())
+
+    def test_promotion_skips_same_course_waiter(self):
+        # 排隊第一的人選了同課另一班 → 遞補時移出、順延下一位
+        b = self.section("A", "B", 4, 5)  # 同課另一班，時段不衝
+        register(self.u, self.a)  # 第 1 位
+        self.assertEqual(register(self.u, b).code, "enrolled")
+        w2 = get_user_model().objects.create_user("w2")
+        register(w2, self.a)  # 第 2 位
+        drop_enrollment(self.v, self.a)  # 只開一個位置
+        self.assertTrue(Enrollment.objects.filter(user=w2, section=self.a).exists())
+        self.assertFalse(Enrollment.objects.filter(user=self.u, section=self.a).exists())
+        # u 的等待列已被移出
+        self.assertFalse(Waitlist.objects.filter(user=self.u, section=self.a).exists())
+
+
 class PrereqTests(CourseTestCase):
     def past_section(self, code, label="A"):
         past = Term.objects.get_or_create(code="113-2", defaults={})[0]
