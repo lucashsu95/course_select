@@ -38,11 +38,23 @@ def _position(queued_at, section_times):
     return 1 + sum(1 for t in section_times if t < queued_at)
 
 
+def _queued_times_by_section(section_ids):
+    """{section_id: 該班級所有還沒遞補列的 queued_at}，固定 1 筆查詢。
+
+    順位規則（_position）的單一查詢點：單列版與批量版共用同一個 filter 形狀。
+    """
+    times = {}
+    for section_id, queued in Waitlist.objects.filter(promoted_at__isnull=True,
+                                                      section_id__in=set(section_ids)) \
+            .values_list("section_id", "queued_at"):
+        times.setdefault(section_id, []).append(queued)
+    return times
+
+
 def waiting_position(wait):
     """單一等待列的目前順位（1 筆查詢）。"""
-    times = list(wait.section.waitlists.filter(promoted_at__isnull=True)
-                 .values_list("queued_at", flat=True))
-    return _position(wait.queued_at, times)
+    times = _queued_times_by_section([wait.section_id])
+    return _position(wait.queued_at, times[wait.section_id])
 
 
 def waiting_positions(user, term):
@@ -54,12 +66,9 @@ def waiting_positions(user, term):
                 .values_list("section_id", "queued_at"))
     if not rows:
         return {}
-    section_times = {}
-    for section_id, queued in Waitlist.objects.filter(promoted_at__isnull=True,
-                                                      section_id__in={s for s, _ in rows}) \
-            .values_list("section_id", "queued_at"):
-        section_times.setdefault(section_id, []).append(queued)
-    return {section_id: _position(queued, section_times.get(section_id, []))
+    section_times = _queued_times_by_section({section_id for section_id, _ in rows})
+    # rows 的每個 section_id 都進了上面的查詢，直接取；KeyError＝邏輯有錯，要顯性化
+    return {section_id: _position(queued, section_times[section_id])
             for section_id, queued in rows}
 
 
