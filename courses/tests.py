@@ -665,3 +665,32 @@ class StandingScopeTests(TestCase):
         standing = get_standing(self.u, self.term)
         # position 是依 queued_at 算的 property，這裡只斷言範圍（哪些班別出現在 standing）
         self.assertEqual(set(standing.waiting), {new.pk})
+
+
+class WindowGateTests(TestCase):
+    """時間窗 gate 模組：三態 vocabulary 只有一個產生點，未知狀態必須大聲失敗。"""
+
+    def setUp(self):
+        self.term = Term.objects.create(code="114-1", is_current=True)
+        self.teacher = Teacher.objects.create(name="T")
+        self.u = get_user_model().objects.create_user("u")
+        self.s = Section.objects.create(
+            course=Course.objects.create(term=self.term, code="A", name="A", teacher=self.teacher),
+            label="A", day=1, start_period=1, end_period=2, capacity=10)
+
+    def test_window_gate_states_and_messages(self):
+        from .window import window_gate
+        now = timezone.now()
+        # 無時間窗（兩欄皆空）＝永遠 open
+        self.assertEqual(window_gate(self.term), ("open", None))
+        self.term.enroll_open = now + timedelta(hours=1)
+        self.term.save()
+        state, msg = window_gate(self.term)
+        self.assertEqual(state, "not_open")
+        self.assertIn("開放", msg)
+        self.term.enroll_open = now - timedelta(hours=2)
+        self.term.enroll_close = now - timedelta(hours=1)
+        self.term.save()
+        state, msg = window_gate(self.term)
+        self.assertEqual(state, "closed")
+        self.assertIn("截止", msg)
