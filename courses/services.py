@@ -1,85 +1,43 @@
-from dataclasses import dataclass
+"""加退選的 commit 路徑。資格規則（為什麼能／不能加選）全在 verdict.evaluate。"""
+from dataclasses import replace
 
-from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
 from .models import Enrollment, Section, Waitlist
-from .standing import completed_codes, enrolled_sections, total_credits, waiting_position
+from .standing import enrolled_sections, get_standing, waiting_position
+from .verdict import conflicting_section, evaluate, same_course_section
 from .window import window_gate
 
 
-def missing_prereqs(course, passed):
-    """使用者還沒修的先修課。「已修」＝課號在 passed（過去學期有同課號加選紀錄）。"""
-    return [c for c in course.prerequisites.all() if c.code not in passed]
-
-
-def same_course_section(sections, course):
-    """sections 中同課程的已選班別；沒有回 None。（加選／遞補共用的資格規則）"""
-    return next((s for s in sections if s.course_id == course.pk), None)
-
-
-def conflicting_section(sections, section):
-    """sections 中與 section 衝堂的已選班別；沒有回 None。（加選／遞補共用的資格規則）"""
-    return next((s for s in sections if s.conflicts_with(section)), None)
-
-
-@dataclass(frozen=True)
-class Result:
-    code: str  # enrolled / already / prereq / conflict / waitlisted / already_waitlisted / over_credits / not_open / closed
-    message: str
-
-    @property
-    def ok(self):
-        return self.code == "enrolled"
-
-
 def register(user, section):
-    """加選一個班別。先過選課時間窗，再查規則：同課不重複、先修已修、不衝堂、額滿轉等待、不超學分。
+    """加選一個班別：在 transaction 內用新查出的 DB 狀態 evaluate，再 commit。
 
     額滿不再直接拒絕：改為加入該班等待名單（等有人退選自動遞補）。
     成功加選時，該課其他班的等待紀錄自動清掉。
+    傳回的 Verdict 與班別列按鈕是同一個判定（verdict.evaluate）。
     """
     with transaction.atomic():
         # shortcut: sqlite 不支援列鎖，名額在高併發下可能超收；換 PostgreSQL 時 select_for_update 才會生效
-        # course__term 一起帶進來，時間窗判斷永遠用新查出的 DB 狀態
+        # course__term 一起帶進來，時間窗與 standing 判斷永遠用新查出的 DB 狀態
         section = Section.objects.select_for_update().select_related("course__term").get(pk=section.pk)
-        course = section.course
-        term = course.term
-        state, message = window_gate(term)
-        if state != "open":
-            return Result(state, message)
-        # 該使用者在本學期的選課狀態（同課、衝堂、學分都從這裡讀）；
-        # 只取 sections 與已修課號，不付沒人讀的等待順位掃描成本
-        sections = enrolled_sections(user, term)
-        passed = completed_codes(user)
-        if (current := same_course_section(sections, course)):
-            return Result("already", f"你已經加選這門課（{current.label_display}）了。")
-        if missing := missing_prereqs(course, passed):
-            names = "、".join(f"{c.code} {c.name}" for c in missing)
-            return Result("prereq", f"還缺先修課：{names}。")
-        if (clash := conflicting_section(sections, section)):
-            return Result("conflict",
-                          f"衝堂：和「{clash.course.name} {clash.label_display}」時間重疊。")
-        if section.is_full:
-            wait = Waitlist.objects.filter(user=user, section=section,
-                                           promoted_at__isnull=True).first()
-            if wait:
-                return Result("already_waitlisted",
-                              f"{section.label_display}已額滿，你已在等待名單（第 {waiting_position(wait)} 位）。")
+        term = section.course.term
+        standing = get_standing(user, term)
+        verdict = evaluate(standing, section, window_gate(term))
+        if verdict.code == "enrolled":
+            Enrollment.objects.create(user=user, section=section)
+            # 選進了這門課，該課其他班的等待紀錄自動清掉
+            Waitlist.objects.filter(user=user, section__course=section.course).delete()
+            return verdict
+        if verdict.code == "waitlisted":
             # 「遞補過後來又退選」的歷史列不佔順位、也擋不到新排隊，先清掉再建
             Waitlist.objects.filter(user=user, section=section,
                                     promoted_at__isnull=False).delete()
             wait = Waitlist.objects.create(user=user, section=section)
-            return Result("waitlisted",
-                          f"{section.label_display}已額滿，已加入等待名單（第 {waiting_position(wait)} 位），有人退選將自動遞補。")
-        # 同一門課至多一個班別是 service 層規則；DB 允許 admin 手動造成同課兩班，故按課去重算學分
-        if total_credits(sections) + course.credits > settings.MAX_CREDITS:
-            return Result("over_credits", f"超過學分上限 {settings.MAX_CREDITS}。")
-        Enrollment.objects.create(user=user, section=section)
-        # 選進了這門課，該課其他班的等待紀錄自動清掉
-        Waitlist.objects.filter(user=user, section__course=course).delete()
-        return Result("enrolled", f"已加選「{course.name} {section.label_display}」。")
+            return replace(verdict,
+                           message=f"{section.label_display}已額滿，已加入等待名單"
+                                   f"（第 {waiting_position(wait)} 位），有人退選將自動遞補。")
+        return verdict
 
 
 def drop_enrollment(user, section):
