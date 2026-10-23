@@ -29,13 +29,38 @@ def enrolled_sections(user, term):
                  .select_related("course__teacher"))
 
 
+def _position(queued_at, section_times):
+    """「第 N 位」的單一定義：1＋同班級中排隊時間更早（還沒遞補）的列數。
+
+    section_times 是該班級所有還沒遞補列的 queued_at。
+    排隊時間相同的列會拿到同一順位（只數「更早」，不數「相同」）。
+    """
+    return 1 + sum(1 for t in section_times if t < queued_at)
+
+
+def waiting_position(wait):
+    """單一等待列的目前順位（1 筆查詢）。"""
+    times = list(wait.section.waitlists.filter(promoted_at__isnull=True)
+                 .values_list("queued_at", flat=True))
+    return _position(wait.queued_at, times)
+
+
 def waiting_positions(user, term):
-    """該使用者在 term 還在排隊的班別：{section_id: 順位}。"""
+    """該使用者在 term 還在排隊的班別：{section_id: 順位}（2 筆查詢，非每列一筆 COUNT）。"""
     if not user.is_authenticated or term is None:
         return {}
-    return {w.section_id: w.position for w in
-            Waitlist.objects.filter(user=user, promoted_at__isnull=True,
-                                     section__course__term=term)}
+    rows = list(Waitlist.objects.filter(user=user, promoted_at__isnull=True,
+                                        section__course__term=term)
+                .values_list("section_id", "queued_at"))
+    if not rows:
+        return {}
+    section_times = {}
+    for section_id, queued in Waitlist.objects.filter(promoted_at__isnull=True,
+                                                      section_id__in={s for s, _ in rows}) \
+            .values_list("section_id", "queued_at"):
+        section_times.setdefault(section_id, []).append(queued)
+    return {section_id: _position(queued, section_times.get(section_id, []))
+            for section_id, queued in rows}
 
 
 @dataclass(frozen=True)

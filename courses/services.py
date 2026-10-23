@@ -5,7 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import Enrollment, Section, Waitlist
-from .standing import completed_codes, enrolled_sections, total_credits
+from .standing import completed_codes, enrolled_sections, total_credits, waiting_position
 from .window import window_gate
 
 
@@ -66,13 +66,13 @@ def register(user, section):
                                            promoted_at__isnull=True).first()
             if wait:
                 return Result("already_waitlisted",
-                              f"{section.label_display}已額滿，你已在等待名單（第 {wait.position} 位）。")
+                              f"{section.label_display}已額滿，你已在等待名單（第 {waiting_position(wait)} 位）。")
             # 「遞補過後來又退選」的歷史列不佔順位、也擋不到新排隊，先清掉再建
             Waitlist.objects.filter(user=user, section=section,
                                     promoted_at__isnull=False).delete()
             wait = Waitlist.objects.create(user=user, section=section)
             return Result("waitlisted",
-                          f"{section.label_display}已額滿，已加入等待名單（第 {wait.position} 位），有人退選將自動遞補。")
+                          f"{section.label_display}已額滿，已加入等待名單（第 {waiting_position(wait)} 位），有人退選將自動遞補。")
         # 同一門課至多一個班別是 service 層規則；DB 允許 admin 手動造成同課兩班，故按課去重算學分
         if total_credits(sections) + course.credits > settings.MAX_CREDITS:
             return Result("over_credits", f"超過學分上限 {settings.MAX_CREDITS}。")
