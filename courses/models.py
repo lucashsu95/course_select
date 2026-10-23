@@ -145,8 +145,3 @@ class Waitlist(models.Model):
 
     def __str__(self):
         return f"{self.user} 等 {self.section}"
-
-    @property
-    def position(self):
-        """目前順位（從 1 起，只算還沒遞補的）。"""
-        return self.section.waitlists.filter(promoted_at__isnull=True, queued_at__lt=self.queued_at).count() + 1
