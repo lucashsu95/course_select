@@ -6,14 +6,14 @@
 from django.utils import timezone
 
 
-def window_gate(term, now=None):
+def window_gate(term):
     """選課時間窗 gate：回 (state, message)。
 
     - ("not_open", 訊息)：尚未開放
     - ("closed", 訊息)：已截止
     - ("open", None)：開放中，或兩欄皆空（＝不限，永遠 open）
     """
-    now = now or timezone.now()
+    now = timezone.now()
     if term.enroll_open and now < term.enroll_open:
         return "not_open", f"選課 {term.enroll_open:%Y/%m/%d %H:%M} 開放。"
     if term.enroll_close and now > term.enroll_close:

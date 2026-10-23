@@ -9,7 +9,7 @@ def apply_actions(standing, sections, window_state="open"):
     """為每個班別設定 s.action（cancel_wait 時另設 s.wait_position）。
 
     standing 是該使用者在本學期的 Standing；window_state 是
-    window_gate 的三態（not_open / open / closed），無時間窗的學期傳 "open"；
+    window_gate 的三態（not_open / open / closed）；
     未知狀態丟 ValueError（不隱式當成某一種 policy）。
     """
     enrolled = standing.section_ids
