@@ -19,7 +19,7 @@
   <h2>班別（選一班加選）</h2>
   <ul class="courses">
     {% for s in sections %}
-    {% include "courses/_section_row.html" with s=s is_mine=s.is_mine next=request.path in_course_detail=True %}
+    {% include "courses/_section_row.html" with s=s next=request.path in_course_detail=True %}
     {% empty %}
     <li class="empty">這門課還沒開放任何班別。</li>
     {% endfor %}

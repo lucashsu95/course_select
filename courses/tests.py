@@ -308,6 +308,12 @@ class WindowTests(CourseTestCase):
         register(self.u, a)
         self._closed_earlier()
         self.assertEqual(self.client.get(reverse("my_schedule")).status_code, 200)
+
+    def test_list_shows_enroll_button_when_open(self):
+        self.client.force_login(self.u)
+        self.section("A", "A", 1, 2)
+        r = self.client.get(reverse("course_list"))
+        self.assertContains(r, "加選</button>")
 class WaitlistTests(CourseTestCase):
     def setUp(self):
         super().setUp()
@@ -346,6 +352,14 @@ class WaitlistTests(CourseTestCase):
         self.assertTrue(cancel_waitlist(self.u, self.a))
         self.assertFalse(cancel_waitlist(self.u, self.a))
         self.assertFalse(Waitlist.objects.filter(user=self.u).exists())
+
+    def test_list_shows_waiting_row_and_cancel_button(self):
+        register(self.u, self.a)  # 額滿 → 等待第 1 位
+        self.client.force_login(self.u)
+        r = self.client.get(reverse("course_list"))
+        self.assertContains(r, "等待中（第 1 位）")
+        self.assertContains(r, "取消等待</button>")
+        self.assertNotContains(r, "加選</button>")
 
     def test_cancel_wait_via_view(self):
         self.client.force_login(self.u)
@@ -585,3 +599,14 @@ class PrereqLimitTests(CourseTestCase):
                              self.course_data("CS999", "CS101", "CS202", "CS303"))
         self.assertContains(r, "先修課程最多設 2 門。")
         self.assertEqual(target.prerequisites.count(), 2)
+
+
+class EmptyDatabaseTests(TestCase):
+    """只跑過 migrate、還沒 seed 的乾淨 DB（沒有 Term）。"""
+
+    def test_my_schedule_renders_without_term(self):
+        # mine 裡的班別必定已加選 → drop，時間窗參數沒作用；
+        # 不能因 Term.current() 回 None 而 500。
+        u = get_user_model().objects.create_user("u")
+        self.client.force_login(u)
+        self.assertEqual(self.client.get(reverse("my_schedule")).status_code, 200)

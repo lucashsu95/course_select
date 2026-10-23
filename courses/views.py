@@ -8,13 +8,8 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from .models import Course, Enrollment, Section, Term, Waitlist
+from .rows import apply_actions
 from .services import cancel_waitlist, drop_enrollment, register
-
-
-def _my_section_ids(user):
-    if not user.is_authenticated:
-        return set()
-    return set(Enrollment.objects.filter(user=user).values_list("section_id", flat=True))
 
 
 def _completed_codes(user):
@@ -48,14 +43,6 @@ def _window_context(term):
     return {"state": state, "text": text}
 
 
-def _wait_positions(user):
-    """該使用者還在排隊的班別：{section_id: 順位}。"""
-    if not user.is_authenticated:
-        return {}
-    return {w.section_id: w.position for w in
-            Waitlist.objects.filter(user=user, promoted_at__isnull=True)}
-
-
 def course_list(request):
     """課程列表：每行是一個班別。"""
     q = request.GET.get("q", "").strip()
@@ -78,14 +65,10 @@ def course_list(request):
         sections = sections.filter(start_period__gte=lo)
         if hi:
             sections = sections.filter(start_period__lte=hi)
-    mine = _my_section_ids(request.user)
-    waiting = _wait_positions(request.user)
     completed = _completed_codes(request.user)
     sections = list(sections)
+    apply_actions(request.user, sections, term.enrollment_state)
     for s in sections:
-        s.is_mine = s.pk in mine
-        s.is_waiting = s.pk in waiting
-        s.wait_position = waiting.get(s.pk)
         s.prereq_list = [(c, c.code in completed) for c in sorted(s.course.prerequisites.all(), key=lambda c: c.code)]
     full_count = sum(1 for s in sections if s.is_full)
     return render(request, "courses/list.html", {
@@ -102,13 +85,8 @@ def course_detail(request, pk):
                     .annotate(enrolled=Count("enrollments", distinct=True),
                               waitlist_count=Count("waitlists", distinct=True,
                                                    filter=Q(waitlists__promoted_at__isnull=True))))
-    mine = _my_section_ids(request.user)
-    waiting = _wait_positions(request.user)
-    for s in sections:
-        s.is_mine = s.pk in mine
-        s.is_waiting = s.pk in waiting
-        s.wait_position = waiting.get(s.pk)
-    my_section = next((s for s in sections if s.is_mine), None)
+    apply_actions(request.user, sections, course.term.enrollment_state)
+    my_section = next((s for s in sections if s.action == "drop"), None)
     # 匿名使用者的 id 與 teacher.user_id 都可能是 None，先擋掉未登入
     is_teacher = request.user.is_authenticated and course.teacher.user_id == request.user.id
     related = list(Course.objects.filter(teacher=course.teacher, term=course.term).exclude(pk=pk)
@@ -177,8 +155,8 @@ def my_schedule(request):
     grid = {(s.day, p): s for s in mine for p in range(s.start_period, s.end_period + 1)}
     last_period = max(8, max((s.end_period for s in mine), default=8))
     rows = [(p, [grid.get((d, p)) for d, _ in Section.DAYS]) for p in range(1, last_period + 1)]
-    for s in mine:
-        s.is_mine = True
+    # mine 裡的班別必定已加選 → action 必定是 drop，時間窗對這支 view 沒有作用
+    apply_actions(request.user, mine)
     return render(request, "courses/schedule.html", {
         "mine": mine, "rows": rows, "days": [label for _, label in Section.DAYS],
         "total": sum({s.course_id: s.course.credits for s in mine}.values()), "max": settings.MAX_CREDITS,
@@ -201,7 +179,7 @@ def teaching_courses(request):
 @login_required
 def course_roster(request, pk):
     course = get_object_or_404(Course.objects.select_related("teacher"), pk=pk, teacher__user=request.user)
-    sections = list(Section.objects.filter(course=course).annotate(enrolled=Count("enrollments")))
+    sections = list(Section.objects.filter(course=course))
     enrollments = (Enrollment.objects.filter(section__course=course)
                    .select_related("user", "section").order_by("created"))
     return render(request, "courses/roster.html", {
