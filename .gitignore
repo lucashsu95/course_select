@@ -268,3 +268,4 @@ pyrightconfig.json
 .DS_Store
 /.playwright-mcp
 /.taste-skill
+client_secret_2*
