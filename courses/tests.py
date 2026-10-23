@@ -753,6 +753,13 @@ class VerdictTests(CourseTestCase):
         v = self.verdict(a)
         self.assertEqual((v.code, v.action, v.severity), ("already", "drop", "info"))
 
+    def test_enrolled_same_section_closed_still_drop(self):
+        # 退選不受時間窗影響（docs §7）：code 照 register 回 closed，action 仍是 drop
+        a = self.section("A", "A", 1, 2)
+        register(self.u, a)
+        v = self.verdict(a, state="closed")
+        self.assertEqual((v.code, v.action, v.severity), ("closed", "drop", "warning"))
+
     def test_enrolled_same_course_other_section_is_blocked(self):
         a = self.section("A", "A", 1, 2)
         b = self.section("A", "B", 4, 5)
@@ -765,6 +772,23 @@ class VerdictTests(CourseTestCase):
         a = self.section("A", "A", 1, 2, capacity=1)
         Enrollment.objects.create(user=get_user_model().objects.create_user("v"), section=a)
         register(self.u, a)
+        v = self.verdict(a)
+        self.assertEqual((v.code, v.action, v.severity), ("already_waitlisted", "cancel_wait", "info"))
+        self.assertEqual(v.position, 1)
+
+    def test_waiting_closed_still_cancel_wait(self):
+        # 取消等待同不受時間窗影響
+        a = self.section("A", "A", 1, 2, capacity=1)
+        Enrollment.objects.create(user=get_user_model().objects.create_user("v"), section=a)
+        register(self.u, a)
+        v = self.verdict(a, state="closed")
+        self.assertEqual((v.code, v.action, v.severity), ("closed", "cancel_wait", "warning"))
+        self.assertEqual(v.position, 1)
+
+    def test_waiting_not_full_is_cancel_wait(self):
+        # 等待列存在時（即使班別已不額滿）也先給取消等待，不看窗口以外的事
+        a = self.section("A", "A", 1, 2)
+        Waitlist.objects.create(user=self.u, section=a)
         v = self.verdict(a)
         self.assertEqual((v.code, v.action, v.severity), ("already_waitlisted", "cancel_wait", "info"))
         self.assertEqual(v.position, 1)
@@ -885,6 +909,24 @@ class ButtonPreviewTests(CourseTestCase):
         body = self.body()
         self.assertIn("已截止", body)
         self.assertNotIn("加選</button>", body)
+
+    def test_closed_window_keeps_drop_button(self):
+        # 截止後已加選者仍看得到「退選」（docs §7）
+        a = self.section("A", "A", 1, 2)
+        register(self.u, a)
+        self.term.enroll_close = timezone.now() - timedelta(hours=1)
+        self.term.save()
+        self.assertIn("退選</button>", self.body())
+
+    def test_closed_window_keeps_cancel_wait_button(self):
+        a = self.section("A", "A", 1, 2, capacity=1)
+        Enrollment.objects.create(user=get_user_model().objects.create_user("v"), section=a)
+        register(self.u, a)  # 額滿 → 等待第 1 位
+        self.term.enroll_close = timezone.now() - timedelta(hours=1)
+        self.term.save()
+        body = self.body()
+        self.assertIn("等待中（第 1 位）", body)
+        self.assertIn("取消等待</button>", body)
 
     def test_not_open_window_shows_not_open_on_all_rows(self):
         self.section("A", "A", 1, 2)

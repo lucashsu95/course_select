@@ -2,8 +2,9 @@
 
 register()（POST 加選的判定與 commit）與班別列按鈕（列表／詳情顯示）
 都跨同一條 seam 讀 evaluate()，按鈕顯示什麼，POST 就回什麼。
-規則順序與 docs/business-rules.md §5 一致：
+POST 規則順序與 docs/business-rules.md §5 一致：
 選課時間窗 → 同課不重複 → 先修已修 → 不衝堂 → 額滿轉等待 → 不超學分。
+按鈕例外：「已加選這班／已排隊」先於時間窗（退選、取消等待不受時間窗影響，docs §7）。
 新規則只加這裡一個分支。
 """
 from dataclasses import dataclass
@@ -64,15 +65,24 @@ def evaluate(standing, section, window):
     course = section.course
     sections = standing.sections
 
-    if state == "not_open":
-        return Verdict("not_open", window_message, "blocked_not_open", "warning")
-    if state == "closed":
-        return Verdict("closed", window_message, "blocked_closed", "warning")
+    # 退選／取消等待不受時間窗影響（docs §7）：「已加選這班／已排隊」
+    # 先於窗口判定；code 仍照 register() 的 window-first 回時間窗結果
     if (current := same_course_section(sections, course)):
-        # 已選的就是這個班別 → 動作是退選（退選不受時間窗影響）；
-        # 選了同課另一班 → 置灰，要換班先退
+        if state != "open":
+            action = "drop" if current.pk == section.pk else f"blocked_{state}"
+            return Verdict(state, window_message, action, "warning")
+        # 已選的就是這個班別 → 動作是退選；選了同課另一班 → 置灰，要換班先退
         action = "drop" if current.pk == section.pk else "blocked_same_course"
         return Verdict("already", f"你已經加選這門課（{current.label_display}）了。", action, "info")
+    if section.pk in standing.waiting:
+        position = standing.waiting[section.pk]
+        if state != "open":
+            return Verdict(state, window_message, "cancel_wait", "warning", position=position)
+        return Verdict("already_waitlisted",
+                       f"{section.label_display}你已在等待名單（第 {position} 位）。",
+                       "cancel_wait", "info", position=position)
+    if state != "open":
+        return Verdict(state, window_message, f"blocked_{state}", "warning")
     if missing := missing_prereqs(course, standing.passed):
         names = "、".join(f"{c.code} {c.name}" for c in missing)
         return Verdict("prereq", f"還缺先修課：{names}。", "blocked_prereq", "error")
@@ -81,11 +91,6 @@ def evaluate(standing, section, window):
                        f"衝堂：和「{clash.course.name} {clash.label_display}」時間重疊。",
                        "blocked_conflict", "error")
     if section.is_full:
-        if section.pk in standing.waiting:
-            position = standing.waiting[section.pk]
-            return Verdict("already_waitlisted",
-                           f"{section.label_display}已額滿，你已在等待名單（第 {position} 位）。",
-                           "cancel_wait", "info", position=position)
         return Verdict("waitlisted", f"{section.label_display}已額滿。", "waitlist", "info")
     if total_credits(sections) + course.credits > settings.MAX_CREDITS:
         return Verdict("over_credits", f"超過學分上限 {settings.MAX_CREDITS}。", "blocked_credits", "error")
