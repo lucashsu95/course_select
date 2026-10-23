@@ -27,7 +27,7 @@
 </div>
 <ul class="courses">
   {% for s in sections %}
-  {% include "courses/_section_row.html" with s=s is_mine=s.is_mine next=request.get_full_path show_prereq_marks=show_prereq_marks %}
+  {% include "courses/_section_row.html" with s=s next=request.get_full_path show_prereq_marks=show_prereq_marks %}
   {% empty %}
   <li class="empty">找不到符合的課程。{% if q or day or slot %}<a href="{% url 'course_list' %}">清除篩選</a>{% endif %}</li>
   {% endfor %}

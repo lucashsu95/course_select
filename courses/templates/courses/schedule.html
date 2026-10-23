@@ -45,7 +45,7 @@
         <a class="course-name" href="{% url 'course_detail' s.course.pk %}">{{ s.course.name }}</a>
         <p class="course-meta">{{ s.course.code }} · {{ s.course.teacher }} · {{ s.label_display }} · {{ s.time_display }} · {{ s.room|default:"教室未定" }} · {{ s.course.credits }} 學分</p>
       </div>
-      <div class="action">{% include "courses/_action.html" with section=s is_mine=True next=request.path %}</div>
+      <div class="action">{% include "courses/_action.html" with section=s action=s.action next=request.path %}</div>
     </li>
     {% empty %}
     <li class="empty">還沒有選課，去 <a href="{% url 'course_list' %}">搜尋課程</a> 看看吧。</li>
