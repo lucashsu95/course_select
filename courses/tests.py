@@ -599,3 +599,14 @@ class PrereqLimitTests(CourseTestCase):
                              self.course_data("CS999", "CS101", "CS202", "CS303"))
         self.assertContains(r, "先修課程最多設 2 門。")
         self.assertEqual(target.prerequisites.count(), 2)
+
+
+class EmptyDatabaseTests(TestCase):
+    """只跑過 migrate、還沒 seed 的乾淨 DB（沒有 Term）。"""
+
+    def test_my_schedule_renders_without_term(self):
+        # mine 裡的班別必定已加選 → drop，時間窗參數沒作用；
+        # 不能因 Term.current() 回 None 而 500。
+        u = get_user_model().objects.create_user("u")
+        self.client.force_login(u)
+        self.assertEqual(self.client.get(reverse("my_schedule")).status_code, 200)

@@ -155,7 +155,8 @@ def my_schedule(request):
     grid = {(s.day, p): s for s in mine for p in range(s.start_period, s.end_period + 1)}
     last_period = max(8, max((s.end_period for s in mine), default=8))
     rows = [(p, [grid.get((d, p)) for d, _ in Section.DAYS]) for p in range(1, last_period + 1)]
-    apply_actions(request.user, mine, Term.current().enrollment_state)
+    # mine 裡的班別必定已加選 → action 必定是 drop，時間窗對這支 view 沒有作用
+    apply_actions(request.user, mine)
     return render(request, "courses/schedule.html", {
         "mine": mine, "rows": rows, "days": [label for _, label in Section.DAYS],
         "total": sum({s.course_id: s.course.credits for s in mine}.values()), "max": settings.MAX_CREDITS,
