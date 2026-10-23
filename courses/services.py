@@ -13,6 +13,16 @@ def missing_prereqs(course, passed):
     return [c for c in course.prerequisites.all() if c.code not in passed]
 
 
+def same_course_section(sections, course):
+    """sections 中同課程的已選班別；沒有回 None。（加選／遞補共用的資格規則）"""
+    return next((s for s in sections if s.course_id == course.pk), None)
+
+
+def conflicting_section(sections, section):
+    """sections 中與 section 衝堂的已選班別；沒有回 None。（加選／遞補共用的資格規則）"""
+    return next((s for s in sections if s.conflicts_with(section)), None)
+
+
 @dataclass(frozen=True)
 class Result:
     code: str  # enrolled / already / prereq / conflict / waitlisted / already_waitlisted / over_credits / not_open / closed
@@ -44,12 +54,12 @@ def register(user, section):
         # 只取 sections 與已修課號，不付沒人讀的等待順位掃描成本
         sections = enrolled_sections(user, term)
         passed = completed_codes(user)
-        if (current := next((s for s in sections if s.course_id == course.pk), None)):
+        if (current := same_course_section(sections, course)):
             return Result("already", f"你已經加選這門課（{current.label_display}）了。")
         if missing := missing_prereqs(course, passed):
             names = "、".join(f"{c.code} {c.name}" for c in missing)
             return Result("prereq", f"還缺先修課：{names}。")
-        if (clash := next((s for s in sections if s.conflicts_with(section)), None)):
+        if (clash := conflicting_section(sections, section)):
             return Result("conflict",
                           f"衝堂：和「{clash.course.name} {clash.label_display}」時間重疊。")
         if section.is_full:
@@ -112,11 +122,11 @@ def _promote_next(section):
         course = wait.section.course
         # 只取需要的 sections（同課與衝堂檢查），不在持鎖的迴圈裡掃描等待順位與已修課號
         sections = enrolled_sections(wait.user, course.term)
-        if any(s.course_id == course.pk for s in sections):
+        if same_course_section(sections, course) is not None:
             # 排隊後又選了同課另一班：不再符合等待條件，移出名單後看下一位
             wait.delete()
             continue
-        if any(s.conflicts_with(wait.section) for s in sections):
+        if conflicting_section(sections, wait.section) is not None:
             # 與已選班別衝堂：同樣移出、順延（維持「不衝堂」不變式）
             wait.delete()
             continue
