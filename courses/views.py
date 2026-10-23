@@ -79,7 +79,7 @@ def course_detail(request, pk):
                                                    filter=Q(waitlists__promoted_at__isnull=True))))
     standing = get_standing(request.user, course.term)
     apply_actions(standing, sections, course.term.enrollment_state)
-    my_section = next((s for s in sections if s.pk in standing.section_ids), None)
+    my_section = next((s for s in sections if s.action == "drop"), None)
     # 匿名使用者的 id 與 teacher.user_id 都可能是 None，先擋掉未登入
     is_teacher = request.user.is_authenticated and course.teacher.user_id == request.user.id
     related = list(Course.objects.filter(teacher=course.teacher, term=course.term).exclude(pk=pk)
@@ -142,7 +142,7 @@ def ack_promotion(request):
 
 @login_required
 def my_schedule(request):
-    # mine 裡的班別必定已加選 → action 必定是 drop，時間窗對這支 view 沒有作用
+    # shortcut: 課表只用到 sections 與 credits；standing 的 waiting、passed 是這頁多付的掃描
     standing = get_standing(request.user, Term.current())
     mine = list(standing.sections)
     grid = {(s.day, p): s for s in mine for p in range(s.start_period, s.end_period + 1)}

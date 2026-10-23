@@ -5,7 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import Enrollment, Section, Waitlist
-from .standing import get_standing
+from .standing import completed_codes, enrolled_sections, total_credits
 
 
 def missing_prereqs(course, passed):
@@ -40,14 +40,16 @@ def register(user, section):
             return Result("not_open", f"選課 {term.enroll_open:%Y/%m/%d %H:%M} 開放。")
         if term.enroll_close and now > term.enroll_close:
             return Result("closed", f"選課已截止（{term.enroll_close:%Y/%m/%d %H:%M} 截止）。")
-        # 該使用者在本學期的 standing（同課、衝堂、學分都從這裡讀）
-        standing = get_standing(user, term)
-        if (current := next((s for s in standing.sections if s.course_id == course.pk), None)):
+        # 該使用者在本學期的選課狀態（同課、衝堂、學分都從這裡讀）；
+        # 只取 sections 與已修課號，不付沒人讀的等待順位掃描成本
+        sections = enrolled_sections(user, term)
+        passed = completed_codes(user)
+        if (current := next((s for s in sections if s.course_id == course.pk), None)):
             return Result("already", f"你已經加選這門課（{current.label_display}）了。")
-        if missing := missing_prereqs(course, standing.passed):
+        if missing := missing_prereqs(course, passed):
             names = "、".join(f"{c.code} {c.name}" for c in missing)
             return Result("prereq", f"還缺先修課：{names}。")
-        if (clash := next((s for s in standing.sections if s.conflicts_with(section)), None)):
+        if (clash := next((s for s in sections if s.conflicts_with(section)), None)):
             return Result("conflict",
                           f"衝堂：和「{clash.course.name} {clash.label_display}」時間重疊。")
         if section.is_full:
@@ -63,7 +65,7 @@ def register(user, section):
             return Result("waitlisted",
                           f"{section.label_display}已額滿，已加入等待名單（第 {wait.position} 位），有人退選將自動遞補。")
         # 同一門課至多一個班別是 service 層規則；DB 允許 admin 手動造成同課兩班，故按課去重算學分
-        if standing.credits + course.credits > settings.MAX_CREDITS:
+        if total_credits(sections) + course.credits > settings.MAX_CREDITS:
             return Result("over_credits", f"超過學分上限 {settings.MAX_CREDITS}。")
         Enrollment.objects.create(user=user, section=section)
         # 選進了這門課，該課其他班的等待紀錄自動清掉
@@ -108,12 +110,13 @@ def _promote_next(section):
             return
         seen.append(wait.pk)
         course = wait.section.course
-        standing = get_standing(wait.user, course.term)
-        if any(s.course_id == course.pk for s in standing.sections):
+        # 只取需要的 sections（同課與衝堂檢查），不在持鎖的迴圈裡掃描等待順位與已修課號
+        sections = enrolled_sections(wait.user, course.term)
+        if any(s.course_id == course.pk for s in sections):
             # 排隊後又選了同課另一班：不再符合等待條件，移出名單後看下一位
             wait.delete()
             continue
-        if any(s.conflicts_with(wait.section) for s in standing.sections):
+        if any(s.conflicts_with(wait.section) for s in sections):
             # 與已選班別衝堂：同樣移出、順延（維持「不衝堂」不變式）
             wait.delete()
             continue
