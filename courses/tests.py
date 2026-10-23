@@ -308,6 +308,12 @@ class WindowTests(CourseTestCase):
         register(self.u, a)
         self._closed_earlier()
         self.assertEqual(self.client.get(reverse("my_schedule")).status_code, 200)
+
+    def test_list_shows_enroll_button_when_open(self):
+        self.client.force_login(self.u)
+        self.section("A", "A", 1, 2)
+        r = self.client.get(reverse("course_list"))
+        self.assertContains(r, "加選</button>")
 class WaitlistTests(CourseTestCase):
     def setUp(self):
         super().setUp()
@@ -346,6 +352,14 @@ class WaitlistTests(CourseTestCase):
         self.assertTrue(cancel_waitlist(self.u, self.a))
         self.assertFalse(cancel_waitlist(self.u, self.a))
         self.assertFalse(Waitlist.objects.filter(user=self.u).exists())
+
+    def test_list_shows_waiting_row_and_cancel_button(self):
+        register(self.u, self.a)  # 額滿 → 等待第 1 位
+        self.client.force_login(self.u)
+        r = self.client.get(reverse("course_list"))
+        self.assertContains(r, "等待中（第 1 位）")
+        self.assertContains(r, "取消等待</button>")
+        self.assertNotContains(r, "加選</button>")
 
     def test_cancel_wait_via_view(self):
         self.client.force_login(self.u)
