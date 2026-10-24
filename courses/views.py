@@ -8,9 +8,9 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from .models import Course, Enrollment, Section, Term, Waitlist
-from .rows import apply_actions
 from .services import cancel_waitlist, drop_enrollment, register
 from .standing import get_standing
+from .verdict import evaluate
 from .window import window_gate
 
 
@@ -59,9 +59,12 @@ def course_list(request):
         if hi:
             sections = sections.filter(start_period__lte=hi)
     standing = get_standing(request.user, term)
+    window = window_gate(term)
     sections = list(sections)
-    apply_actions(standing, sections, window_gate(term)[0])
     for s in sections:
+        verdict = evaluate(standing, s, window)
+        s.action = verdict.action
+        s.wait_position = verdict.position
         s.prereq_list = [(c, c.code in standing.passed) for c in sorted(s.course.prerequisites.all(), key=lambda c: c.code)]
     full_count = sum(1 for s in sections if s.is_full)
     return render(request, "courses/list.html", {
@@ -74,12 +77,20 @@ def course_list(request):
 
 def course_detail(request, pk):
     course = get_object_or_404(Course.objects.select_related("teacher"), pk=pk)
+    # evaluate() 每列會碰 section.course 與 course.prerequisites，必須 prefetch，
+    # 否則每列多 2 筆查詢（與 course_list 同一支配方）
     sections = list(Section.objects.filter(course=course)
+                    .select_related("course")
+                    .prefetch_related("course__prerequisites")
                     .annotate(enrolled=Count("enrollments", distinct=True),
                               waitlist_count=Count("waitlists", distinct=True,
                                                    filter=Q(waitlists__promoted_at__isnull=True))))
     standing = get_standing(request.user, course.term)
-    apply_actions(standing, sections, window_gate(course.term)[0])
+    window = window_gate(course.term)
+    for s in sections:
+        verdict = evaluate(standing, s, window)
+        s.action = verdict.action
+        s.wait_position = verdict.position
     my_section = next((s for s in sections if s.action == "drop"), None)
     # 匿名使用者的 id 與 teacher.user_id 都可能是 None，先擋掉未登入
     is_teacher = request.user.is_authenticated and course.teacher.user_id == request.user.id
@@ -98,14 +109,8 @@ def course_detail(request, pk):
 def enroll(request, pk):
     section = get_object_or_404(Section.objects.select_related("course"), pk=pk)
     result = register(request.user, section)
-    if result.ok:
-        messages.success(request, result.message)
-    elif result.code in ("already", "waitlisted", "already_waitlisted"):
-        messages.info(request, result.message)
-    elif result.code in ("not_open", "closed"):
-        messages.warning(request, result.message)
-    else:
-        messages.error(request, result.message)
+    # severity 是 Verdict interface 的一部分（success/info/warning/error＝django messages 等級）
+    getattr(messages, result.severity)(request, result.message)
     return _redirect_next(request, "course_detail", section.course_id)
 
 
@@ -149,7 +154,9 @@ def my_schedule(request):
     grid = {(s.day, p): s for s in mine for p in range(s.start_period, s.end_period + 1)}
     last_period = max(8, max((s.end_period for s in mine), default=8))
     rows = [(p, [grid.get((d, p)) for d, _ in Section.DAYS]) for p in range(1, last_period + 1)]
-    apply_actions(standing, mine)
+    # mine 裡的班別必定已加選、動作必定是退選（退選不受時間窗影響）
+    for s in mine:
+        s.action = "drop"
     return render(request, "courses/schedule.html", {
         "mine": mine, "rows": rows, "days": [label for _, label in Section.DAYS],
         "total": standing.credits, "max": settings.MAX_CREDITS,
