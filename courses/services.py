@@ -1,12 +1,13 @@
-"""加退選的 commit 路徑。資格規則（為什麼能／不能加選）全在 verdict.evaluate。"""
+"""加退選的 commit 路徑。資格規則（為什麼能／不能加選）全在 verdict.evaluate，
+等待名單生命週期（排隊／順位／遞補／取消）全在 waitlist。"""
 from dataclasses import replace
 
 from django.db import transaction
-from django.utils import timezone
 
-from .models import Enrollment, Section, Waitlist
-from .standing import enrolled_sections, get_standing, waiting_position
-from .verdict import conflicting_section, evaluate, same_course_section
+from . import waitlist
+from .models import Enrollment, Section
+from .standing import get_standing
+from .verdict import evaluate
 from .window import window_gate
 
 
@@ -31,16 +32,13 @@ def register(user, section):
         if verdict.code == "enrolled":
             Enrollment.objects.create(user=user, section=section)
             # 選進了這門課，該課其他班的等待紀錄自動清掉
-            Waitlist.objects.filter(user=user, section__course=section.course).delete()
+            waitlist.release_course(user, section.course)
             return verdict
         if verdict.code == "waitlisted":
-            # 「遞補過後來又退選」的歷史列不佔順位、也擋不到新排隊，先清掉再建
-            Waitlist.objects.filter(user=user, section=section,
-                                    promoted_at__isnull=False).delete()
-            wait = Waitlist.objects.create(user=user, section=section)
+            wait = waitlist.join(user, section)
             return replace(verdict,
                            message=f"{section.label_display}已額滿，已加入等待名單"
-                                   f"（第 {waiting_position(wait)} 位），有人退選將自動遞補。")
+                                   f"（第 {waitlist.position_of(wait)} 位），有人退選將自動遞補。")
         return verdict
 
 
@@ -55,53 +53,5 @@ def drop_enrollment(user, section):
         deleted, _ = Enrollment.objects.filter(user=user, section=section).delete()
         if not deleted:
             return False
-        _promote_next(section)
+        waitlist.promote_next(section)
         return True
-
-
-def _next_waiter(section, exclude=()):
-    # 只鎖 waitlist 列本身（of=("self",)），不連帶鎖 User/Course，
-    # 避免與 register() 的鎖順序不同造成 deadlock
-    return (Waitlist.objects.filter(section=section, promoted_at__isnull=True)
-            .exclude(pk__in=exclude)
-            .select_for_update(of=("self",)).first())
-
-
-def _promote_next(section):
-    """該班等待名單第一位轉為正式加選（FIFO，不越序）。
-
-    若該位「已選同課另一班」或「與已選班別衝堂」，該列移出名單、順延下一位。
-    遞補不重查學分上限（見 docs 已知限制）。
-    """
-    now = timezone.now()
-    seen = []
-    while True:
-        wait = _next_waiter(section, exclude=seen)
-        if wait is None:
-            return
-        seen.append(wait.pk)
-        course = wait.section.course
-        # 只取需要的 sections（同課與衝堂檢查），不在持鎖的迴圈裡掃描等待順位與已修課號
-        sections = enrolled_sections(wait.user, course.term)
-        if same_course_section(sections, course) is not None:
-            # 排隊後又選了同課另一班：不再符合等待條件，移出名單後看下一位
-            wait.delete()
-            continue
-        if conflicting_section(sections, wait.section) is not None:
-            # 與已選班別衝堂：同樣移出、順延（維持「不衝堂」不變式）
-            wait.delete()
-            continue
-        if section.is_full:  # 建立前重查容量（正常退選後必有空位，純防禦）
-            return
-        Enrollment.objects.create(user=wait.user, section=section)
-        wait.promoted_at = now
-        wait.save(update_fields=["promoted_at"])
-        # 人已遞補進這門課，該課其他班的等待紀錄同步清掉
-        Waitlist.objects.filter(user=wait.user, section__course=course).exclude(pk=wait.pk).delete()
-        return
-
-
-def cancel_waitlist(user, section):
-    """取消等待；回 True 表示真的有紀錄被取消。"""
-    deleted, _ = Waitlist.objects.filter(user=user, section=section, promoted_at__isnull=True).delete()
-    return deleted > 0

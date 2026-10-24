@@ -3,12 +3,12 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
-from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
-from .models import Course, Enrollment, Section, Term, Waitlist
-from .services import cancel_waitlist, drop_enrollment, register
+from . import waitlist
+from .models import Course, Enrollment, Section, Term
+from .services import drop_enrollment, register
 from .standing import get_standing
 from .verdict import evaluate
 from .window import window_gate
@@ -129,7 +129,7 @@ def drop(request, pk):
 @require_POST
 def cancel_wait(request, pk):
     section = get_object_or_404(Section.objects.select_related("course"), pk=pk)
-    if cancel_waitlist(request.user, section):
+    if waitlist.cancel(request.user, section):
         messages.success(request, f"已取消等待「{section.course.name} {section.label_display}」。")
     else:
         messages.info(request, "你沒有在等這個班別。")
@@ -140,9 +140,7 @@ def cancel_wait(request, pk):
 @require_POST
 def ack_promotion(request):
     """明確確認遞補通知（banner 的「知道了」）；GET 不寫庫。"""
-    Waitlist.objects.filter(user=request.user,
-                            promoted_at__isnull=False,
-                            promoted_seen_at__isnull=True).update(promoted_seen_at=timezone.now())
+    waitlist.mark_promotions_read(request.user)
     return _redirect_next(request, "course_list")
 
 

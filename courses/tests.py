@@ -6,8 +6,9 @@ from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from . import waitlist
 from .models import Course, Enrollment, Section, Teacher, Term, Waitlist
-from .services import cancel_waitlist, drop_enrollment, register
+from .services import drop_enrollment, register
 from .standing import get_standing
 from .verdict import evaluate
 
@@ -335,28 +336,26 @@ class WaitlistTests(CourseTestCase):
         self.assertIn("第 1 位", r.message)
 
     def test_waiting_positions_batch_matches_row_positions(self):
-        # 批量版（standing）與逐行版（property）的順位必須一致——UI 與訊息同一來源
-        from .standing import waiting_position, waiting_positions
+        # 批量版（positions）與逐行版（position_of）的順位必須一致——UI 與訊息同一來源
         b = self.section("B", "A", 3, 4, capacity=1)
         w1 = get_user_model().objects.create_user("w1")
         Enrollment.objects.create(user=w1, section=b)  # B 班額滿
         register(self.u, self.a)   # a 班第 1 位
         register(self.u, b)        # b 班第 1 位
         register(w1, self.a)       # a 班第 2 位
-        positions = waiting_positions(self.u, self.term)
+        positions = waitlist.positions(self.u, self.term)
         self.assertEqual(positions, {self.a.pk: 1, b.pk: 1})
         for wait in Waitlist.objects.filter(user=self.u, promoted_at__isnull=True):
-            self.assertEqual(positions[wait.section_id], waiting_position(wait))
+            self.assertEqual(positions[wait.section_id], waitlist.position_of(wait))
 
     def test_tied_queued_at_share_position(self):
         # 兩列排隊時間相同：依「只數更早的列」規則，兩列拿到同一順位
-        from .standing import waiting_position
         w1 = get_user_model().objects.create_user("w1")
         r1 = Waitlist.objects.create(user=self.u, section=self.a)
         r2 = Waitlist.objects.create(user=w1, section=self.a)
         Waitlist.objects.filter(pk__in=[r1.pk, r2.pk]).update(queued_at=timezone.now())
-        self.assertEqual(waiting_position(r1), waiting_position(r2))
-        self.assertEqual(waiting_position(r1), 1)
+        self.assertEqual(waitlist.position_of(r1), waitlist.position_of(r2))
+        self.assertEqual(waitlist.position_of(r1), 1)
 
     def test_promotes_on_drop(self):
         register(self.u, self.a)
@@ -371,13 +370,12 @@ class WaitlistTests(CourseTestCase):
         drop_enrollment(self.v, self.a)      # 只開一個位置
         self.assertTrue(Enrollment.objects.filter(user=first, section=self.a).exists())
         self.assertFalse(Enrollment.objects.filter(user=self.u, section=self.a).exists())
-        from .standing import waiting_position
-        self.assertEqual(waiting_position(Waitlist.objects.get(user=self.u, section=self.a)), 1)
+        self.assertEqual(waitlist.position_of(Waitlist.objects.get(user=self.u, section=self.a)), 1)
 
     def test_cancel_wait(self):
         register(self.u, self.a)
-        self.assertTrue(cancel_waitlist(self.u, self.a))
-        self.assertFalse(cancel_waitlist(self.u, self.a))
+        self.assertTrue(waitlist.cancel(self.u, self.a))
+        self.assertFalse(waitlist.cancel(self.u, self.a))
         self.assertFalse(Waitlist.objects.filter(user=self.u).exists())
 
     def test_list_shows_waiting_row_and_cancel_button(self):
@@ -446,7 +444,7 @@ class WaitlistTests(CourseTestCase):
         r = register(self.u, self.a)
         self.assertEqual(r.code, "waitlisted")  # 不再是 already_waitlisted
         self.assertIn("第 1 位", r.message)
-        self.assertTrue(cancel_waitlist(self.u, self.a))  # 取消也要動得了
+        self.assertTrue(waitlist.cancel(self.u, self.a))  # 取消也要動得了
 
     def test_register_converges_when_section_no_longer_full(self):
         # 等待列還在但班別已不額滿（admin 調高名額）：POST 直接加選、等待列清掉，
@@ -700,7 +698,7 @@ class StandingScopeTests(TestCase):
         Waitlist.objects.create(user=self.u, section=old)
         Waitlist.objects.create(user=self.u, section=new)
         standing = get_standing(self.u, self.term)
-        # position 依 queued_at 算（定義在 standing.waiting_position），這裡只斷言範圍（哪些班別出現在 standing）
+        # position 依 queued_at 算（定義在 waitlist.position_of），這裡只斷言範圍（哪些班別出現在 standing）
         self.assertEqual(set(standing.waiting), {new.pk})
 
 
