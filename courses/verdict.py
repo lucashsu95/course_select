@@ -12,8 +12,6 @@ from dataclasses import dataclass
 
 from django.conf import settings
 
-from .standing import total_credits
-
 
 def missing_prereqs(course, passed):
     """使用者還沒修的先修課。「已修」＝課號在 passed（過去學期有同課號加選紀錄）。"""
@@ -99,6 +97,6 @@ def evaluate(standing, section, window):
                        "blocked_conflict", "error")
     if section.is_full:
         return Verdict("waitlisted", f"{section.label_display}已額滿。", "waitlist", "info")
-    if total_credits(sections) + course.credits > settings.MAX_CREDITS:
+    if standing.credits + course.credits > settings.MAX_CREDITS:
         return Verdict("over_credits", f"超過學分上限 {settings.MAX_CREDITS}。", "blocked_credits", "error")
     return Verdict("enrolled", f"已加選「{course.name} {section.label_display}」。", "enroll", "success")
