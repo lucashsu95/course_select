@@ -1,5 +1,5 @@
 """模板 context processors。"""
-from .models import Waitlist
+from . import waitlist
 
 
 def waitlist_banner(request):
@@ -11,9 +11,7 @@ def waitlist_banner(request):
     user = request.user
     if not user.is_authenticated:
         return {}
-    items = list(Waitlist.objects.filter(
-        user=user, promoted_at__isnull=False, promoted_seen_at__isnull=True,
-    ).select_related("section__course"))
+    items = list(waitlist.unread_promotions(user).select_related("section__course"))
     if not items:
         return {}
     return {"waitlist_banner": [f"{w.section.course.name} {w.section.label_display}" for w in items]}
