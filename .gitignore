@@ -272,3 +272,4 @@ client_secret_2*
 
 # agent skill 暫存區
 .agents
+/skills-lock.json
