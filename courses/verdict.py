@@ -86,7 +86,7 @@ def evaluate(standing, section, window):
         if state != "open":
             return Verdict(state, window_message, "cancel_wait", "warning", position=position)
         return Verdict("already_waitlisted",
-                       f"{section.label_display}你已在等待名單（第 {position} 位）。",
+                       f"{section.label_display}已額滿，你已在等待名單（第 {position} 位）。",
                        "cancel_wait", "info", position=position)
     if state != "open":
         return Verdict(state, window_message, f"blocked_{state}", "warning")
