@@ -448,6 +448,16 @@ class WaitlistTests(CourseTestCase):
         self.assertIn("第 1 位", r.message)
         self.assertTrue(cancel_waitlist(self.u, self.a))  # 取消也要動得了
 
+    def test_register_converges_when_section_no_longer_full(self):
+        # 等待列還在但班別已不額滿（admin 調高名額）：POST 直接加選、等待列清掉，
+        # 不用先手動取消等待（main 的自動收斂語意）
+        self.a.capacity = 2
+        self.a.save()
+        r = register(self.u, self.a)
+        self.assertEqual(r.code, "enrolled")
+        self.assertTrue(Enrollment.objects.filter(user=self.u, section=self.a).exists())
+        self.assertFalse(Waitlist.objects.filter(user=self.u, section=self.a).exists())
+
     def test_position_message_after_promotion(self):
         # 發生過遞補後，新加入者的「第 N 位」不能把歷史列算進去
         w1 = get_user_model().objects.create_user("w1")
@@ -760,6 +770,21 @@ class VerdictTests(CourseTestCase):
         v = self.verdict(a, state="closed")
         self.assertEqual((v.code, v.action, v.severity), ("closed", "drop", "warning"))
 
+    def test_enrolled_same_section_not_open_still_drop(self):
+        # 未開放同不受影響：按鈕仍是退選（closed 版見上）
+        a = self.section("A", "A", 1, 2)
+        register(self.u, a)
+        v = self.verdict(a, state="not_open")
+        self.assertEqual((v.code, v.action, v.severity), ("not_open", "drop", "warning"))
+
+    def test_enrolled_same_course_other_section_closed_is_blocked_closed(self):
+        # 已選同課另一班＋已截止：code 照 register 回 closed，action 置灰 blocked_closed
+        a = self.section("A", "A", 1, 2)
+        b = self.section("A", "B", 4, 5)
+        register(self.u, b)
+        v = self.verdict(a, state="closed")
+        self.assertEqual((v.code, v.action, v.severity), ("closed", "blocked_closed", "warning"))
+
     def test_enrolled_same_course_other_section_is_blocked(self):
         a = self.section("A", "A", 1, 2)
         b = self.section("A", "B", 4, 5)
@@ -785,13 +810,14 @@ class VerdictTests(CourseTestCase):
         self.assertEqual((v.code, v.action, v.severity), ("closed", "cancel_wait", "warning"))
         self.assertEqual(v.position, 1)
 
-    def test_waiting_not_full_is_cancel_wait(self):
-        # 等待列存在時（即使班別已不額滿）也先給取消等待，不看窗口以外的事
+    def test_waiting_not_full_falls_through_to_enroll(self):
+        # 等待列還在但班別已不額滿（admin 調高名額）：落回正常規則，
+        # 按鈕是加選、POST 直接加選（docs §7 按鈕表：cancel_wait 要求該班額滿）
         a = self.section("A", "A", 1, 2)
         Waitlist.objects.create(user=self.u, section=a)
         v = self.verdict(a)
-        self.assertEqual((v.code, v.action, v.severity), ("already_waitlisted", "cancel_wait", "info"))
-        self.assertEqual(v.position, 1)
+        self.assertEqual((v.code, v.action, v.severity), ("enrolled", "enroll", "success"))
+        self.assertIsNone(v.position)
 
     def test_full_not_waiting_is_waitlist(self):
         a = self.section("A", "A", 1, 2, capacity=1)

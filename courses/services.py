@@ -16,6 +16,10 @@ def register(user, section):
     額滿不再直接拒絕：改為加入該班等待名單（等有人退選自動遞補）。
     成功加選時，該課其他班的等待紀錄自動清掉。
     傳回的 Verdict 與班別列按鈕是同一個判定（verdict.evaluate）。
+
+    standing 含等待順位掃描（多 1–2 筆查詢），舊版刻意省掉；
+    現在按鈕與 POST 共用 evaluate，「已排隊第 N 位」的按鈕狀態
+    需要它，接受這個成本換兩端語意一致。
     """
     with transaction.atomic():
         # shortcut: sqlite 不支援列鎖，名額在高併發下可能超收；換 PostgreSQL 時 select_for_update 才會生效

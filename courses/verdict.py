@@ -4,7 +4,8 @@ register()（POST 加選的判定與 commit）與班別列按鈕（列表／詳�
 都跨同一條 seam 讀 evaluate()，按鈕顯示什麼，POST 就回什麼。
 POST 規則順序與 docs/business-rules.md §5 一致：
 選課時間窗 → 同課不重複 → 先修已修 → 不衝堂 → 額滿轉等待 → 不超學分。
-按鈕例外：「已加選這班／已排隊」先於時間窗（退選、取消等待不受時間窗影響，docs §7）。
+按鈕例外：「已加選這班／已排隊（班別仍額滿）」先於時間窗
+（退選、取消等待不受時間窗影響，docs §7）。
 新規則只加這裡一個分支。
 """
 from dataclasses import dataclass
@@ -50,7 +51,11 @@ class Verdict:
 
 
 def evaluate(standing, section, window):
-    """使用者加選一個班別的資格判定（純函數，不查 DB）。
+    """使用者加選一個班別的資格判定。
+
+    不主動查 DB，但會觸碰 section.course、course.prerequisites.all()、
+    section.is_full 這些 lazy 關聯：呼叫端在迴圈裡用它時必須
+    select_related／prefetch_related／annotate，否則每列多幾筆查詢（N+1）。
 
     standing 是該使用者在本學期的 Standing（standing.get_standing）；
     window 是 window_gate 的傳回值 (state, message)。
@@ -74,7 +79,9 @@ def evaluate(standing, section, window):
         # 已選的就是這個班別 → 動作是退選；選了同課另一班 → 置灰，要換班先退
         action = "drop" if current.pk == section.pk else "blocked_same_course"
         return Verdict("already", f"你已經加選這門課（{current.label_display}）了。", action, "info")
-    if section.pk in standing.waiting:
+    # 等待列還在、但班別已不額滿（例如 admin 調高名額）：落回正常規則，
+    # POST 直接加選並清掉等待列（main 的自動收斂語意）；額滿才停在「取消等待」
+    if section.pk in standing.waiting and section.is_full:
         position = standing.waiting[section.pk]
         if state != "open":
             return Verdict(state, window_message, "cancel_wait", "warning", position=position)

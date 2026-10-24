@@ -1,6 +1,6 @@
 """選課時間窗：一個學期的狀態與 gate（policy 的單一擁有者）。
 
-加選 gate（services）、狀態列標籤（views）、班別列動作（rows）
+加選 gate（services）、狀態列標籤（views）、班別列按鈕（verdict.evaluate）
 都讀同一個結果；not_open / open / closed 三態只在這裡產生。
 """
 from django.utils import timezone

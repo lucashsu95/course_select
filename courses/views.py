@@ -77,7 +77,11 @@ def course_list(request):
 
 def course_detail(request, pk):
     course = get_object_or_404(Course.objects.select_related("teacher"), pk=pk)
+    # evaluate() 每列會碰 section.course 與 course.prerequisites，必須 prefetch，
+    # 否則每列多 2 筆查詢（與 course_list 同一支配方）
     sections = list(Section.objects.filter(course=course)
+                    .select_related("course")
+                    .prefetch_related("course__prerequisites")
                     .annotate(enrolled=Count("enrollments", distinct=True),
                               waitlist_count=Count("waitlists", distinct=True,
                                                    filter=Q(waitlists__promoted_at__isnull=True))))
