@@ -6,15 +6,15 @@ labels: ready-for-agent
 assignees: ""
 ---
 
-## What to build
+## 要做什麼
 
 <!-- 從使用者角度描述：這張 ticket 完成後，什麼行為會動起來。不要逐層列實作步驟，也不要貼檔案路徑。 -->
 
-## Why
+## 為什麼
 
 <!-- 為什麼要做、不做的代價是什麼。一句話就好；跟 What to build 重複就刪掉這段。 -->
 
-## Acceptance criteria
+## 驗收條件
 
 - [ ]
 - [ ]
