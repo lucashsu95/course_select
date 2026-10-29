@@ -9,6 +9,9 @@ ALLOWED_HOSTS = ["*"] if DEBUG else os.environ.get("ALLOWED_HOSTS", "").split(",
 INSTALLED_APPS = [
     "django.contrib.admin", "django.contrib.auth", "django.contrib.contenttypes",
     "django.contrib.sessions", "django.contrib.messages", "django.contrib.staticfiles",
+    "django.contrib.sites",
+    "allauth", "allauth.account", "allauth.socialaccount",
+    "allauth.socialaccount.providers.google",
     "courses",
 ]
 MIDDLEWARE = [
@@ -19,6 +22,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
 ]
 ROOT_URLCONF = "config.urls"
 TEMPLATES = [{
@@ -39,14 +43,30 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- 登入 ---
-# 老師驗數用：/login/ 一鍵登入 demo 學生（courses.views.demo_login），不用密碼。
-# Google OAuth 版本保留在 feat/google-oauth 分支；要還原就從那支分支帶回來。
+# 學生一律走 Google OAuth（/login/ → Google）；只有經 Google 驗證的
+# @ntub.edu.tw 信箱能登入，判斷在伺服器端（courses.adapters.NtubSocialAccountAdapter）。
+# Django Admin 仍用 Django 自己的帳密登入（ModelBackend）。
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
 ]
+SITE_ID = 1
 LOGIN_URL = "/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
+# 只留社交登入：關掉 allauth 的密碼註冊／改密／密碼重設等頁面
+SOCIALACCOUNT_ONLY = True
+SOCIALACCOUNT_LOGIN_ON_GET = True  # 點登入直接跳 Google，不多一頁確認
+# 信箱驗證由 Google 端把關（adapter 會檢查 email_verified），不用再寄確認信
+ACCOUNT_EMAIL_VERIFICATION = "none"
+# 不要用「信箱相同就自動連結既有帳號」，避免非 Google 的帳號被綁架
+SOCIALACCOUNT_EMAIL_AUTHENTICATION = False
+SOCIALACCOUNT_ADAPTER = "courses.adapters.NtubSocialAccountAdapter"
+SOCIALACCOUNT_PROVIDERS = {"google": {
+    "APP": {"client_id": os.environ.get("GOOGLE_CLIENT_ID", ""),
+            "secret": os.environ.get("GOOGLE_CLIENT_SECRET", ""), "key": ""},
+    "SCOPE": ["profile", "email"],
+}}
 
 MAX_CREDITS = 25  # 學分上限
 

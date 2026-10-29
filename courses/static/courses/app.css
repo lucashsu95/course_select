@@ -525,7 +525,7 @@ h2 { font-size: var(--fs-section); font-weight: 600; }
 .c-prereq { color: var(--muted); }
 .prereq-missing { color: var(--negative); }
 
-/* 登入頁（demo 一鍵登入） */
+/* 登入頁（Google 登入入口） */
 .login-card { max-width: 420px; margin: 8vh auto 0; padding: 36px 32px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); text-align: center; box-shadow: 0 1px 3px rgb(0 0 0 / 0.04); }
 .login-card h1 { font-size: 22px; margin-bottom: 10px; }
 .login-card .login-note { color: var(--muted); font-size: 14px; line-height: 1.6; margin-bottom: 24px; }

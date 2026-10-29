@@ -2,7 +2,7 @@
 
 > 這份文件記錄「系統現在實際在做什麼判斷」，是程式行為的說明，不是願景。
 > 規則若與 `courses/services.py`／`courses/models.py` 不一致，以程式碼為準並回修此文件。
-> 最後對齊：2026-10-29（b9bf3cf：Google 登入改 demo 一鍵登入（驗數用），Google 版保留在 feat/google-oauth 分支）。
+> 最後對齊：2026-10-30（Google OAuth 登入：學生限 @ntub.edu.tw 且信箱經 Google 驗證，檢查在伺服器端 `courses/adapters.py`）。
 
 ## 1. 名詞定義
 
@@ -147,14 +147,14 @@
 | 角色 | 怎麼成為 | 能看什麼 |
 | --- | --- | --- |
 | 訪客 | 未登入 | 課程列表、課程詳情（免登入）；看不到「我的課表」 |
-| 學生 | demo 一鍵登入 | 全部選課功能＋我的課表 |
+| 學生 | Google OAuth 登入（@ntub.edu.tw 且信箱經 Google 驗證） | 全部選課功能＋我的課表 |
 | 老師 | 後台把 Teacher 綁定到該使用者的帳號（`Teacher.user` 一對一） | 學生的一切＋「我的課程」（自己當前的課）＋自己課程的選課名單 |
 | admin | Django staff | 後台 CRUD 所有資料 |
 
 ### 老師權限邊界
 
 - 老師身分**不是** staff，由 `Teacher.user` 這個一對一關聯推導，沒有額外角色布林值。
-- 老師只能看**自己**的課程與名單：開別人的課程 roster 網址 → 404；未登入 → 轉 demo 登入（`/login/`）。
+- 老師只能看**自己**的課程與名單：開別人的課程 roster 網址 → 404；未登入 → 轉登入頁（`/login/`，再跳 Google）。
 - 老師**看得到自己課的「加選」按鈕**，系統沒擋老師加選自己的課（已知限制）。
 - 老師只看當前學期的課與名單，歷年紀錄沒有入口。
 
@@ -169,7 +169,7 @@
 - **加退選只接受 POST**（`require_POST`），GET 無法加選。
 - **開放轉址防護**：表單的 `next` 只接受與目前站台同 host 的網址，外部網址一律改跳回預設頁面。
 - 加選/退選需要登入（`login_required`）；課程瀏覽免登入。
-- 登入為 demo 一鍵登入（`/login/`，無密碼、驗數用）：POST 直接登入 `demo` 帳號，回跳 `next` 只收本站網址。Google OAuth 版本保留在 `feat/google-oauth` 分支。
+- 登入為 Google OAuth（`/login/` → `/accounts/google/login/`）：伺服器端檢查信箱網域必為 `@ntub.edu.tw`，且 Google 回傳的信箱須為已驗證狀態（`email_verified`／`verified_email`）；不符即拒絕並回登入頁。資料取自 Google 的 token／userinfo，不接受使用者輸入。學生帳號不設密碼，allauth 的密碼註冊／改密／密碼重設頁面一律關閉（`SOCIALACCOUNT_ONLY`）；管理員與老師另外走 Django Admin 的帳密登入。
 
 ## 14. 已知限制（業務層）
 

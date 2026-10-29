@@ -31,7 +31,6 @@
       <button class="btn btn-secondary">登出</button></form>
   {% else %}
     <p class="who-meta">登入後才能加選課程。</p>
-    <form method="post" action="{% url 'demo_login' %}" class="inline-form">{% csrf_token %}
-      <button class="btn btn-secondary">登入</button></form>
+    <a class="btn btn-secondary" href="{% url 'login' %}">登入</a>
   {% endif %}
 </div>

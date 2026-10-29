@@ -8,7 +8,7 @@
   </div>
   <div class="action">
     {% if not user.is_authenticated %}
-      <p class="login-hint">登入後才能加選 · <a href="{% url 'demo_login' %}">登入</a></p>
+      <p class="login-hint">登入後才能加選 · <a href="{% url 'login' %}">登入</a></p>
     {% endif %}
     {% if user.is_authenticated and is_teacher %}<a class="btn btn-secondary" href="{% url 'course_roster' course.pk %}">選課名單</a>{% endif %}
   </div>

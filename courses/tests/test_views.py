@@ -81,7 +81,7 @@ class TeacherRoleTests(CourseTestCase):
         for name, args in [("teaching", []), ("course_roster", [self.a.course_id])]:
             r = self.client.get(reverse(name, args=args))
             self.assertEqual(r.status_code, 302)
-            self.assertIn(reverse("demo_login"), r["Location"])
+            self.assertIn(reverse("login"), r["Location"])
         self.assertEqual(self.client.get(reverse("course_list")).status_code, 200)
 
     def test_roster_link_only_for_teacher(self):
@@ -100,42 +100,27 @@ class TeacherRoleTests(CourseTestCase):
         self.assertTrue(Course.objects.filter(pk=self.a.pk).exists())
 
 
-class DemoLoginTests(CourseTestCase):
-    def setUp(self):
-        super().setUp()
-        self.demo = get_user_model().objects.create_user("demo", email="demo@example.com")
+class LoginPageTests(CourseTestCase):
+    """登入頁只有 Google 一個入口，沒有 demo 一鍵登入。"""
 
-    def test_get_shows_login_page(self):
-        r = self.client.get(reverse("demo_login"))
+    def test_get_shows_google_login_only(self):
+        r = self.client.get(reverse("login"))
         self.assertEqual(r.status_code, 200)
-        self.assertContains(r, "demo 登入")
-
-    def test_post_logs_in_demo_student(self):
-        r = self.client.post(reverse("demo_login"), follow=True)
-        self.assertEqual(r.context["user"].username, "demo")
-
-    def test_post_honors_internal_next(self):
-        nxt = reverse("my_schedule")
-        r = self.client.post(reverse("demo_login"), {"next": nxt}, follow=True)
-        self.assertEqual(r.request["PATH_INFO"], nxt)
-        self.assertEqual(r.context["user"].username, "demo")
-
-    def test_post_blocks_external_next(self):
-        r = self.client.post(reverse("demo_login"), {"next": "https://evil.example.com/x"}, follow=True)
-        self.assertEqual(r.request["PATH_INFO"], "/")
-        self.assertEqual(r.context["user"].username, "demo")
+        self.assertContains(r, "使用 NTUB Google 帳號登入")
+        self.assertContains(r, "/accounts/google/login/")
+        self.assertNotContains(r, "demo")
 
     def test_get_redirects_when_authenticated(self):
         self.client.force_login(self.u)
-        r = self.client.get(reverse("demo_login"))
+        r = self.client.get(reverse("login"))
         self.assertEqual(r.status_code, 302)
         self.assertEqual(r["Location"], "/")
 
-    def test_post_without_demo_user_stays_anonymous_with_message(self):
-        self.demo.delete()
-        r = self.client.post(reverse("demo_login"), follow=True)
+    def test_post_is_not_a_way_in(self):
+        """登入頁不是表單：POST 不會登入任何人。"""
+        get_user_model().objects.create_user("demo", email="demo@example.com")
+        r = self.client.post(reverse("login"), follow=True)
         self.assertFalse(r.context["user"].is_authenticated)
-        self.assertContains(r, "demo 帳號不存在")
 
 
 class SlotFilterTests(CourseTestCase):

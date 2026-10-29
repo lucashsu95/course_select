@@ -1,6 +1,6 @@
 # 選課系統
 
-Django 迷你選課系統（demo 一鍵登入，驗數用）：瀏覽課程、加退選（自動擋衝堂、超學分）、額滿等待名單與自動遞補、週課表。
+Django 迷你選課系統（Google OAuth 登入，限 @ntub.edu.tw）：瀏覽課程、加退選（自動擋衝堂、超學分）、額滿等待名單與自動遞補、週課表。
 
 ## 功能
 
@@ -12,7 +12,7 @@ Django 迷你選課系統（demo 一鍵登入，驗數用）：瀏覽課程、�
 - **先修課程** — 課程可設 1–2 門先修；列表/詳情標「先修：CS201」，登入者標已修✓／未修，未修加選被擋。
 - **篩選** — 課程列表可依關鍵字、星期、時段（上午/中午/下午/晚上）疊加過濾。
 - **我的課表** — 週一至週五網格，節點標示班別與教室，附總學分（每門課只算一次）。
-- **登入** — demo 一鍵登入（`/login/`，驗數用）：POST 直接登入 `demo` 學生（`seed` 建立），不用密碼。課程瀏覽免登入，加選才需要。Google OAuth 版本保留在 `feat/google-oauth` 分支。
+- **登入** — Google OAuth（`/login/` → `/accounts/google/login/`）：只有經 Google 驗證的 `@ntub.edu.tw` 信箱能登入，檢查在伺服器端（`courses/adapters.py`）。課程瀏覽免登入，加選才需要。Django Admin 維持原本的帳密登入（管理員／老師）。
 - **老師專區** — 後台把 Teacher 綁到登入帳號後，該帳號可看到「我的課程」與自己課程的選課名單（姓名、信箱、班別、加選時間）。
 
 ## 快速開始
@@ -28,16 +28,23 @@ uv run --env-file .env manage.py runserver
 
 開 <http://localhost:8000>。要進 `/admin/` 先跑一次 `uv run manage.py createsuperuser`。
 
-## 登入（demo，驗數用）
+## 登入（Google OAuth）
 
-`/login/` 點一下即登入 `demo` 學生帳號（無密碼），該帳號由 `seed` 建立。Google OAuth 版本保留在 `feat/google-oauth` 分支，要還原從該分支帶回並重新加入 `django-allauth[socialaccount]` 依賴。
+`/login/` 只有一個入口：「使用 NTUB Google 帳號登入」，按下去跳 Google 授權頁。登入後由伺服器端檢查：
+
+1. 信箱網域必須是 `@ntub.edu.tw`（其他網域一律拒絕）。
+2. Google 回傳的信箱必須是已驗證狀態（`email_verified`／`verified_email`），未驗證一律拒絕。
+
+檢查寫在 `courses/adapters.py`（allauth 的 `SOCIALACCOUNT_ADAPTER`），資料來自 Google 的 token／userinfo，不是使用者自己填的表單，所以繞過不了。驗證失敗會回到登入頁並顯示原因。
+
+Google 憑證放在 `.env`（`GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`），`config/settings.py` 讀取後交給 allauth；`SOCIALACCOUNT_ONLY = True` 關掉 allauth 的密碼註冊／改密／密碼重設，學生只能走 Google。管理員與老師另外走 Django Admin 的帳密登入（`/admin/`）。
 
 ## 角色與權限
 
 | 角色 | 怎麼來的 | 多了什麼 |
 | --- | --- | --- |
 | 訪客 | 未登入 | 課程列表、課程詳情 |
-| 學生 | demo 一鍵登入 | 加選／退選、我的課表 |
+| 學生 | Google OAuth（@ntub.edu.tw 且信箱經 Google 驗證） | 加選／退選、我的課表 |
 | 老師 | 後台把 Teacher 綁到登入帳號 | 我的課程、自己課程的選課名單 |
 | 管理員 | `is_staff` | Django admin 的完整 CRUD |
 
@@ -57,11 +64,14 @@ uv run manage.py test
 
 涵蓋加選的各種結果（成功、同課另一班、缺先修、衝堂、額滿轉等待、超學分）、選課時間窗（未開放／加選中／已截止三態、時間窗優先於其他檢查、退選與課表不受影響）、等待名單（遞補、不越序、遞補重查同課與衝堂、重新排隊、取消、同課互斥、橫幅需明確確認）、先修顯示（訪客不標、登入標✓/未修、本學期加選不算已修）、時段篩選四段＋與星期疊加、退選後改選、開放轉址防護、老師名單的可見性（本人 200、他人 404、匿名轉登入）、頁面渲染，以及班別的欄位與唯一約束。
 
+Google 登入另有 `courses/tests/test_auth.py`：登入成功、非 NTUB 信箱拒絕、未驗證信箱拒絕、登出、Admin 帳密登入。測試會假造 Google 的回應（mock 掉換 token 與 id_token 解析），不連真實 Google。
+
 ## 專案結構
 
 ```
-config/     settings、根路由（/admin/、/login/、/logout/、courses）
+config/     settings、根路由（/admin/、/accounts/、/login/、/logout/、courses）
 courses/    models（Term / Teacher / Course / Section / Enrollment）、services、views、urls、templates、static
+courses/adapters.py        Google 登入的伺服器端把關（NTUB 網域 + 信箱已驗證）
 courses/management/commands/seed.py    範例學期、課程與班別資料
 ```
 
@@ -71,6 +81,7 @@ courses/management/commands/seed.py    範例學期、課程與班別資料
 | --- | --- |
 | `config/settings.py` | `MAX_CREDITS = 25`：每學期學分上限 |
 | `.env` | `SECRET_KEY`、`DEBUG`、`ALLOWED_HOSTS`（上線時設 `DEBUG=0` 且填 `ALLOWED_HOSTS`） |
+| `.env` | `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`：Google OAuth 憑證（`config/settings.py` 讀取後交給 allauth） |
 | `.env` | `USE_NGROK=1` 與 `NGROK_ORIGIN=https://你的固定網域` 才啟用 ngrok 的 https 與 CSRF 設定，預設關閉 |
 
 ## 業務規則

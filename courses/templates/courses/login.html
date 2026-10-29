@@ -3,10 +3,7 @@
 {% block content %}
 <section class="login-card">
   <h1>登入</h1>
-  <p class="login-note">這是驗數用的 demo 登入：一鍵登入 demo 學生帳號，不用密碼。</p>
-  <form method="post" class="inline-form">{% csrf_token %}
-    <input type="hidden" name="next" value="{{ request.GET.next|default:'' }}">
-    <button type="submit" class="btn btn-primary login-btn">登入</button>
-  </form>
+  <p class="login-note">使用 NTUB Google 帳號登入（需為 @ntub.edu.tw 且已通過 Google 信箱驗證）。</p>
+  <a class="btn btn-primary login-btn" href="{% url 'google_login' %}?next={{ request.GET.next|default:'' }}">使用 NTUB Google 帳號登入</a>
 </section>
 {% endblock %}
