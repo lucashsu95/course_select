@@ -48,6 +48,8 @@ def demo_login(request):
         user = User.objects.filter(username="demo").first()
         if user is not None:
             auth_login(request, user)
+        else:
+            messages.error(request, "demo 帳號不存在，請先跑 uv run manage.py seed")
         return _redirect_next(request, "course_list")
     if request.user.is_authenticated:
         return redirect("course_list")

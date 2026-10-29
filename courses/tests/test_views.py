@@ -100,6 +100,18 @@ class TeacherRoleTests(CourseTestCase):
         self.assertTrue(Course.objects.filter(pk=self.a.pk).exists())
 
 
+class DemoLoginTests(CourseTestCase):
+    def setUp(self):
+        super().setUp()
+        self.demo = get_user_model().objects.create_user("demo", email="demo@example.com")
+
+    def test_post_without_demo_user_stays_anonymous_with_message(self):
+        self.demo.delete()
+        r = self.client.post(reverse("demo_login"), follow=True)
+        self.assertFalse(r.context["user"].is_authenticated)
+        self.assertContains(r, "demo 帳號不存在")
+
+
 class SlotFilterTests(CourseTestCase):
     def setUp(self):
         super().setUp()
