@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth import login as auth_login
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -34,6 +36,24 @@ def _window_context(term):
     else:
         text = "加選中"
     return {"state": state, "text": text}
+
+
+def demo_login(request):
+    """寫死登入（老師驗數用）：一鍵登入 demo 學生，不用密碼。
+
+    GET 顯示登入頁；POST 直接登入後回 next（只收本站網址）。
+    Google OAuth 版本在 feat/google-oauth 分支。
+    """
+    if request.method == "POST":
+        user = User.objects.filter(username="demo").first()
+        if user is not None:
+            auth_login(request, user)
+        else:
+            messages.error(request, "demo 帳號不存在，請先跑 uv run manage.py seed")
+        return _redirect_next(request, "course_list")
+    if request.user.is_authenticated:
+        return redirect("course_list")
+    return render(request, "courses/login.html")
 
 
 def course_list(request):

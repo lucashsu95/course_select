@@ -1,6 +1,6 @@
 # 選課系統
 
-Django + Google 登入的迷你選課系統：瀏覽課程、加退選（自動擋衝堂、超學分）、額滿等待名單與自動遞補、週課表。
+Django 迷你選課系統（demo 一鍵登入，驗數用）：瀏覽課程、加退選（自動擋衝堂、超學分）、額滿等待名單與自動遞補、週課表。
 
 ## 功能
 
@@ -12,7 +12,7 @@ Django + Google 登入的迷你選課系統：瀏覽課程、加退選（自動�
 - **先修課程** — 課程可設 1–2 門先修；列表/詳情標「先修：CS201」，登入者標已修✓／未修，未修加選被擋。
 - **篩選** — 課程列表可依關鍵字、星期、時段（上午/中午/下午/晚上）疊加過濾。
 - **我的課表** — 週一至週五網格，節點標示班別與教室，附總學分（每門課只算一次）。
-- **登入** — 只開放 Google（django-allauth）。課程瀏覽免登入，加選才需要。
+- **登入** — demo 一鍵登入（`/login/`，驗數用）：POST 直接登入 `demo` 學生（`seed` 建立），不用密碼。課程瀏覽免登入，加選才需要。Google OAuth 版本保留在 `feat/google-oauth` 分支。
 - **老師專區** — 後台把 Teacher 綁到登入帳號後，該帳號可看到「我的課程」與自己課程的選課名單（姓名、信箱、班別、加選時間）。
 
 ## 快速開始
@@ -21,7 +21,6 @@ Django + Google 登入的迷你選課系統：瀏覽課程、加退選（自動�
 
 ```bash
 uv sync                        # 建 .venv 並安裝依賴
-cp .env.example .env           # 填入 Google OAuth 憑證，見下一節
 uv run manage.py migrate
 uv run manage.py seed          # 載入 10 門範例課程與班別，可重複執行
 uv run --env-file .env manage.py runserver
@@ -29,31 +28,22 @@ uv run --env-file .env manage.py runserver
 
 開 <http://localhost:8000>。要進 `/admin/` 先跑一次 `uv run manage.py createsuperuser`。
 
-## Google 登入設定
+## 登入（demo，驗數用）
 
-1. Google Cloud Console → 建立 OAuth 用戶端，類型選「網頁應用程式」。
-2. Authorized redirect URI 填 `http://localhost:8000/accounts/google/login/callback/`。
-3. Client ID 與 Secret 寫進 `.env`：
-
-   ```dotenv
-   GOOGLE_CLIENT_ID=...
-   GOOGLE_CLIENT_SECRET=...
-   ```
-
-沒填憑證時課程頁仍可瀏覽，只有登入會失敗。
+`/login/` 點一下即登入 `demo` 學生帳號（無密碼），該帳號由 `seed` 建立。Google OAuth 版本保留在 `feat/google-oauth` 分支，要還原從該分支帶回並重新加入 `django-allauth[socialaccount]` 依賴。
 
 ## 角色與權限
 
 | 角色 | 怎麼來的 | 多了什麼 |
 | --- | --- | --- |
 | 訪客 | 未登入 | 課程列表、課程詳情 |
-| 學生 | Google 登入 | 加選／退選、我的課表 |
+| 學生 | demo 一鍵登入 | 加選／退選、我的課表 |
 | 老師 | 後台把 Teacher 綁到登入帳號 | 我的課程、自己課程的選課名單 |
 | 管理員 | `is_staff` | Django admin 的完整 CRUD |
 
 老師不是 staff。staff 等於整個 admin 的 CRUD 權限，老師只需要自己課程的名單，所以身分由 `Teacher.user` 這個一對一關聯推導，沒有額外的角色布林值。
 
-把某人變成老師：`/admin/courses/teacher/` → 選一筆 Teacher → 「登入帳號」選他的 Google 帳號 → 儲存。該帳號下次登入就會在側欄看到「我的課程」。沒綁定的人開 `/teaching/` 只會看到空頁面，直接輸入別人的名單網址會拿到 404。
+把某人變成老師：`/admin/courses/teacher/` → 選一筆 Teacher → 「登入帳號」選他的帳號 → 儲存。該帳號下次登入就會在側欄看到「我的課程」。沒綁定的人開 `/teaching/` 只會看到空頁面，直接輸入別人的名單網址會拿到 404。
 
 ## 開發流程
 
@@ -70,7 +60,7 @@ uv run manage.py test
 ## 專案結構
 
 ```
-config/     settings、根路由（/admin/、/accounts/、courses）
+config/     settings、根路由（/admin/、/login/、/logout/、courses）
 courses/    models（Term / Teacher / Course / Section / Enrollment）、services、views、urls、templates、static
 courses/management/commands/seed.py    範例學期、課程與班別資料
 ```

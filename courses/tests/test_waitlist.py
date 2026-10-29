@@ -122,7 +122,7 @@ class WaitlistTests(CourseTestCase):
         self.assertEqual(self.client.get(reverse("cancel_wait", args=[self.a.pk])).status_code, 405)
         anon = Client()
         r = anon.post(reverse("cancel_wait", args=[self.a.pk]))
-        self.assertIn("/accounts/google/login/", r.headers["Location"])
+        self.assertIn("/login/", r.headers["Location"])
         self.assertTrue(Waitlist.objects.filter(user=self.u).exists())
 
     def test_requeue_after_promotion_and_drop(self):

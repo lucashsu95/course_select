@@ -67,5 +67,19 @@
     {% block content %}{% endblock %}
   </main>
 </div>
+<script>
+// 送出後立即反饋（整頁跳轉前）：停用按鈕並加轉圈
+document.querySelectorAll("form.inline-form").forEach(function (form) {
+  form.addEventListener("submit", function () {
+    var btn = form.querySelector("button");
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    var s = document.createElement("span");
+    s.className = "spinner";
+    s.setAttribute("aria-hidden", "true");
+    btn.append(s);
+  });
+});
+</script>
 </body>
 </html>
