@@ -105,6 +105,32 @@ class DemoLoginTests(CourseTestCase):
         super().setUp()
         self.demo = get_user_model().objects.create_user("demo", email="demo@example.com")
 
+    def test_get_shows_login_page(self):
+        r = self.client.get(reverse("demo_login"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "demo 登入")
+
+    def test_post_logs_in_demo_student(self):
+        r = self.client.post(reverse("demo_login"), follow=True)
+        self.assertEqual(r.context["user"].username, "demo")
+
+    def test_post_honors_internal_next(self):
+        nxt = reverse("my_schedule")
+        r = self.client.post(reverse("demo_login"), {"next": nxt}, follow=True)
+        self.assertEqual(r.request["PATH_INFO"], nxt)
+        self.assertEqual(r.context["user"].username, "demo")
+
+    def test_post_blocks_external_next(self):
+        r = self.client.post(reverse("demo_login"), {"next": "https://evil.example.com/x"}, follow=True)
+        self.assertEqual(r.request["PATH_INFO"], "/")
+        self.assertEqual(r.context["user"].username, "demo")
+
+    def test_get_redirects_when_authenticated(self):
+        self.client.force_login(self.u)
+        r = self.client.get(reverse("demo_login"))
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r["Location"], "/")
+
     def test_post_without_demo_user_stays_anonymous_with_message(self):
         self.demo.delete()
         r = self.client.post(reverse("demo_login"), follow=True)
