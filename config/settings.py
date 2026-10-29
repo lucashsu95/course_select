@@ -9,9 +9,6 @@ ALLOWED_HOSTS = ["*"] if DEBUG else os.environ.get("ALLOWED_HOSTS", "").split(",
 INSTALLED_APPS = [
     "django.contrib.admin", "django.contrib.auth", "django.contrib.contenttypes",
     "django.contrib.sessions", "django.contrib.messages", "django.contrib.staticfiles",
-    "django.contrib.sites",
-    "allauth", "allauth.account", "allauth.socialaccount",
-    "allauth.socialaccount.providers.google",
     "courses",
 ]
 MIDDLEWARE = [
@@ -22,7 +19,6 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "allauth.account.middleware.AccountMiddleware",
 ]
 ROOT_URLCONF = "config.urls"
 TEMPLATES = [{
@@ -42,22 +38,15 @@ USE_TZ = True
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# --- 登入：只開 Google ---
+# --- 登入 ---
+# 老師驗數用：/login/ 一鍵登入 demo 學生（courses.views.demo_login），不用密碼。
+# Google OAuth 版本保留在 feat/google-oauth 分支；要還原就從那支分支帶回來。
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
-    "allauth.account.auth_backends.AuthenticationBackend",
 ]
-SITE_ID = 1
-LOGIN_URL = "/accounts/google/login/"
+LOGIN_URL = "/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
-SOCIALACCOUNT_LOGIN_ON_GET = True  # 點登入直接跳 Google，不多一頁確認
-ACCOUNT_EMAIL_VERIFICATION = "none"
-SOCIALACCOUNT_PROVIDERS = {"google": {
-    "APP": {"client_id": os.environ.get("GOOGLE_CLIENT_ID", ""),
-            "secret": os.environ.get("GOOGLE_CLIENT_SECRET", ""), "key": ""},
-    "SCOPE": ["profile", "email"],
-}}
 
 MAX_CREDITS = 25  # 學分上限
 

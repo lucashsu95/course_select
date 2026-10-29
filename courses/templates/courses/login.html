@@ -1,0 +1,12 @@
+{% extends "courses/base.html" %}
+{% block title %}登入{% endblock %}
+{% block content %}
+<section class="login-card">
+  <h1>登入</h1>
+  <p class="login-note">這是驗數用的 demo 登入：一鍵登入 demo 學生帳號，不用密碼。</p>
+  <form method="post">{% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.GET.next|default:'' }}">
+    <button type="submit" class="btn btn-primary login-btn">登入</button>
+  </form>
+</section>
+{% endblock %}

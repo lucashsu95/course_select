@@ -81,7 +81,7 @@ class TeacherRoleTests(CourseTestCase):
         for name, args in [("teaching", []), ("course_roster", [self.a.course_id])]:
             r = self.client.get(reverse(name, args=args))
             self.assertEqual(r.status_code, 302)
-            self.assertIn(reverse("google_login"), r["Location"])
+            self.assertIn(reverse("demo_login"), r["Location"])
         self.assertEqual(self.client.get(reverse("course_list")).status_code, 200)
 
     def test_roster_link_only_for_teacher(self):
