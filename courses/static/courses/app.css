@@ -530,3 +530,8 @@ h2 { font-size: var(--fs-section); font-weight: 600; }
 .login-card h1 { font-size: 22px; margin-bottom: 10px; }
 .login-card .login-note { color: var(--muted); font-size: 14px; line-height: 1.6; margin-bottom: 24px; }
 .login-card .login-btn { width: 100%; }
+
+/* 表單送出中：停用按鈕＋轉圈，讓使用者知道有在處理 */
+.btn:disabled { opacity: 0.55; cursor: default; }
+.btn .spinner { display: inline-block; width: 12px; height: 12px; margin-left: 8px; vertical-align: -1.5px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: btn-spin 0.7s linear infinite; }
+@keyframes btn-spin { to { transform: rotate(360deg); } }
