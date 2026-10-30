@@ -6,19 +6,32 @@
   <section class="login-brand-panel" aria-labelledby="login-brand-title">
     {% include "courses/_brand.html" %}
     <div class="login-brand-copy">
-      <p class="login-eyebrow">NATIONAL TAIPEI UNIVERSITY OF BUSINESS</p>
-      <h1 id="login-brand-title">校園選課，<br>從容開始。</h1>
-      <p>登入後管理你的課程與每週課表。</p>
+      <h1 id="login-brand-title">115-1 學期選課</h1>
+      <p class="login-brand-school">國立臺北商業大學</p>
+      <ul class="login-feature-list">
+        <li>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+          <span><strong>搜尋課程</strong><small>依課名、課號、老師與時段篩選</small></span>
+        </li>
+        <li>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z"/><path d="m9 12 2 2 4-4"/></svg>
+          <span><strong>自動檢查衝堂</strong><small>加選時即時比對你的現有課表</small></span>
+        </li>
+        <li>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="m9 16 2 2 4-4"/></svg>
+          <span><strong>課表即時更新</strong><small>加退選後立刻反映在每週課表</small></span>
+        </li>
+      </ul>
     </div>
-    <p class="login-disclaimer">本站為課程專題製作的模擬系統，並非 NTUB 正式校務選課系統。</p>
+    <p class="login-disclaimer">本站為課程專題模擬系統，非 NTUB 正式校務選課系統。</p>
   </section>
 
   <main class="login-content">
+    <div class="login-mobile-brand">{% include "courses/_brand.html" %}</div>
     <section class="login-card" aria-labelledby="login-title">
       <div class="login-card-heading">
-        <p class="login-eyebrow">WELCOME</p>
         <h2 id="login-title">登入選課系統</h2>
-        <p class="login-note">使用學校 Google 帳號繼續</p>
+        <p class="login-note">請使用 NTUB 學校 Google 帳號</p>
       </div>
       <a class="btn login-google-btn" href="{% url 'google_login' %}?next={{ request.GET.next|default:'' }}">
         <svg class="google-mark" width="20" height="20" viewBox="0 0 48 48" aria-hidden="true"><path fill="#4285F4" d="M43.6 24.5c0-1.4-.1-2.8-.4-4.1H24v7.8h11a9.4 9.4 0 0 1-4.1 6.2v5.1h6.6c3.9-3.6 6.1-8.8 6.1-15Z"/><path fill="#34A853" d="M24 44c5.5 0 10.1-1.8 13.5-4.8l-6.6-5.1c-1.8 1.2-4.1 2-6.9 2-5.3 0-9.8-3.6-11.4-8.4H5.8v5.3A20 20 0 0 0 24 44Z"/><path fill="#FBBC05" d="M12.6 27.7a12 12 0 0 1 0-7.4V15H5.8a20 20 0 0 0 0 18Z"/><path fill="#EA4335" d="M24 11.9c3 0 5.7 1 7.8 3.1l5.8-5.8C34.1 5.9 29.5 4 24 4A20 20 0 0 0 5.8 15l6.8 5.3c1.6-4.8 6.1-8.4 11.4-8.4Z"/></svg>
@@ -26,7 +39,7 @@
       </a>
       <div class="login-requirement">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
-        <p>需使用 <strong>@ntub.edu.tw</strong> 信箱，並完成 Google 信箱驗證。</p>
+        <p>僅限 <strong>@ntub.edu.tw</strong> 信箱，且需通過 Google 驗證</p>
       </div>
     </section>
     <p class="login-mobile-disclaimer">本站為課程專題製作的模擬系統，並非 NTUB 正式校務選課系統。</p>
