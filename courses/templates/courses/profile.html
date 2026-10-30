@@ -4,42 +4,46 @@
 <div class="page-head">
   <div>
     <h1>個人資料</h1>
-    <p class="sub">Google 帳號資料由 Google 提供，無法在此修改；學籍可以自行調整。</p>
+    <p class="sub">管理登入帳號與目前學籍資料。</p>
   </div>
+  <button class="btn btn-primary" type="submit" form="setup-form" id="profile-save" disabled>儲存變更</button>
 </div>
 
-<section class="panel setup-panel">
-  <h2 class="setup-title">Google 帳號</h2>
-  <dl class="profile-list">
-    <dt>姓名</dt>
-    <dd>{{ google_name }}</dd>
-    <dt>Email</dt>
-    <dd>{{ google_email }}</dd>
-  </dl>
-</section>
+<div class="profile-overview-grid">
+  <section class="panel profile-account-card">
+    <h2 class="setup-title">Google 帳號</h2>
+    <div class="profile-account">
+      <span class="avatar avatar-large" aria-hidden="true">{{ google_name|default:google_email|slice:":1"|upper }}</span>
+      <div><strong>{{ google_name }}</strong><span>{{ google_email }}</span></div>
+      <span class="readonly-tag">唯讀</span>
+    </div>
+  </section>
 
-<section class="panel setup-panel">
-  <h2 class="setup-title">目前學籍</h2>
-  <dl class="profile-list">
-    <dt>學制</dt>
-    <dd>{{ program_type.name_zh }}（{{ program_type.code }}）</dd>
-    <dt>系所</dt>
-    <dd>{{ department.name_zh }}（{{ department.code }}）</dd>
-    <dt>年級</dt>
-    <dd>{{ class_group.grade_no }} 年級</dd>
-    <dt>班級</dt>
-    <dd>{{ class_group.name_zh }}（{{ class_group.code }}）</dd>
-  </dl>
-</section>
+  <section class="panel profile-current-card">
+    <h2 class="setup-title">目前學籍</h2>
+    <dl class="profile-list">
+      <dt>學制</dt>
+      <dd>{{ program_type.name_zh }}（{{ program_type.code }}）</dd>
+      <dt>系所</dt>
+      <dd>{{ department.name_zh }}（{{ department.code }}）</dd>
+      <dt>年級／班級</dt>
+      <dd>{{ class_group.grade_no }} 年級 · {{ class_group.name_zh }}（{{ class_group.code }}）</dd>
+    </dl>
+  </section>
+</div>
 
-<section class="panel setup-panel">
-  <h2 class="setup-title">變更學籍</h2>
-  <form method="post" class="setup-form" id="setup-form">
+<section class="panel setup-panel setup-edit-panel">
+  <div class="setup-section-head">
+    <div><h2 class="setup-title">變更學籍</h2><p class="sub">更新後會套用於我的課表與選課資訊。</p></div>
+    <p class="unsaved-note" id="unsaved-note" hidden>有尚未儲存的變更</p>
+  </div>
+  <form method="post" class="setup-form" id="setup-form" data-dirty-form>
     {% csrf_token %}
 
     <div class="setup-row">
       <div class="setup-field">
         <label for="id_program_type">學制</label>
+        <small>選擇你的修業制度</small>
         <select name="program_type" id="id_program_type" required>
           <option value="">請選擇學制</option>
           {% for pt in cascade.program_types %}
@@ -51,6 +55,7 @@
 
       <div class="setup-field">
         <label for="id_department">系所</label>
+        <small>依學制篩選可選系所</small>
         <select name="department" id="id_department" required>
           <option value="">請選擇系所</option>
           {% for d in cascade.departments %}
@@ -64,6 +69,7 @@
     <div class="setup-row">
       <div class="setup-field">
         <label for="id_grade">年級</label>
+        <small>選擇目前就讀年級</small>
         <select name="grade" id="id_grade" required>
           <option value="">請選擇年級</option>
           {% for g in cascade.grades %}
@@ -75,6 +81,7 @@
 
       <div class="setup-field">
         <label for="id_class_group">班級</label>
+        <small>選擇所屬班級</small>
         <select name="class_group" id="id_class_group" required>
           <option value="">請選擇班級</option>
           {% for c in cascade.class_groups %}
@@ -85,7 +92,7 @@
       </div>
     </div>
 
-    <button class="btn btn-primary" type="submit">儲存學籍</button>
+    <p class="class-preview" id="class-preview" aria-live="polite">你的班級：{{ program_type.name_zh }} {{ department.name_zh }} {{ class_group.grade_no }} 年級 {{ class_group.name_zh }}（{{ class_group.code }}）</p>
   </form>
 </section>
 
@@ -141,7 +148,47 @@
   dept.addEventListener("change", refreshGrades);
   grade.addEventListener("change", refreshGroups);
 
+  var preview = document.getElementById("class-preview");
+  function updatePreview() {
+    var selections = [pt, dept, grade, group].map(function (select) {
+      return select.options[select.selectedIndex];
+    });
+    if (selections.some(function (option) { return !option || !option.value; })) {
+      preview.textContent = "請依序選擇學制、系所、年級與班級";
+      preview.classList.remove("is-ready");
+      return;
+    }
+    var classText = selections[3].textContent.trim();
+    var codeMatch = classText.match(/[（(]([^）)]+)[）)]$/);
+    var className = classText.replace(/[（(][^）)]*[）)]$/, "");
+    preview.textContent = "你的班級：" + selections[0].textContent.split(/[（(]/)[0].trim() + " " + selections[1].textContent.split(/[（(]/)[0].trim() + " " + selections[2].textContent.trim() + " " + className + (codeMatch ? " (" + codeMatch[1] + ")" : "");
+    preview.classList.add("is-ready");
+  }
+
+  [pt, dept, grade, group].forEach(function (select) { select.addEventListener("change", updatePreview); });
+
   refreshDepartments();
+  updatePreview();
+})();
+
+(function () {
+  var form = document.getElementById("setup-form");
+  var save = document.getElementById("profile-save");
+  var note = document.getElementById("unsaved-note");
+  if (!form || !save || !note) return;
+  var fields = Array.prototype.slice.call(form.querySelectorAll("select"));
+  var original = fields.map(function (field) { return field.value; });
+  function updateDirtyState() {
+    var dirty = fields.some(function (field, index) { return field.value !== original[index]; });
+    save.disabled = !dirty;
+    note.hidden = !dirty;
+  }
+  fields.forEach(function (field) { field.addEventListener("change", updateDirtyState); });
+  window.addEventListener("beforeunload", function (event) {
+    if (save.disabled) return;
+    event.preventDefault();
+    event.returnValue = "";
+  });
 })();
 </script>
 {% endblock %}
