@@ -304,6 +304,13 @@ h2 { font-size: var(--fs-section); font-weight: 600; }
 }
 .btn-danger:hover:not(:disabled) { background: #a82e26; }
 
+.btn-enrolled {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+.btn-enrolled:disabled { opacity: 1; cursor: default; }
+
 .btn-danger.btn-ghost,
 .btn-ghost.btn-danger {
   background: transparent;
