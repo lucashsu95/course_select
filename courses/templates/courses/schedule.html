@@ -1,27 +1,31 @@
 {% extends "courses/base.html" %}
 {% block title %}我的課表{% endblock %}
+{% block body_class %}schedule-page{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
+<header class="schedule-page-head">
+  <div class="schedule-heading">
     <h1>我的課表</h1>
-    <p class="sub">{% if term %}<span class="num">{{ term.code }}</span> 學期 · {% endif %}本學期修課概況</p>
+    <p class="schedule-term">{% if term %}{{ term.code }} 學期{% endif %}</p>
   </div>
-</div>
-
-<section class="schedule-summary" aria-label="本學期修課摘要">
-  <div class="schedule-summary-item schedule-credit-summary">
-    <span class="summary-label">已選學分</span>
-    <strong class="summary-value"><span class="num">{{ total }}</span><span class="summary-divider">/</span><span class="num">{{ max }}</span></strong>
-    <span class="summary-credit-track" role="progressbar" aria-label="學分上限使用率" aria-valuemin="0" aria-valuemax="{{ max }}" aria-valuenow="{{ total }}"><span style="width:{% if total >= max %}100{% else %}{% widthratio total max 100 %}{% endif %}%"></span></span>
+  <div class="schedule-summary" aria-label="本學期修課摘要">
+    <div class="schedule-summary-credit"><span class="summary-label">已選學分</span><strong class="summary-value"><span class="num">{{ total }}</span><span class="summary-divider">/</span><span class="num">{{ max }}</span></strong><span class="summary-credit-track" role="progressbar" aria-label="學分上限使用率" aria-valuemin="0" aria-valuemax="{{ max }}" aria-valuenow="{{ total }}"><span style="width:{% if total >= max %}100{% else %}{% widthratio total max 100 %}{% endif %}%"></span></span></div>
+    <span class="summary-separator" aria-hidden="true">|</span>
+    <div class="schedule-summary-item"><span class="summary-label">已加選</span><strong class="summary-value"><span class="num">{{ mine|length }}</span> 門</strong></div>
+    {% if profile %}<span class="summary-separator" aria-hidden="true">|</span><div class="schedule-summary-item schedule-summary-class"><span class="summary-label">班級</span><strong class="summary-value">{{ profile.class_group.name_zh }}（{{ profile.class_group.code }}）</strong></div>{% endif %}
   </div>
-  <div class="schedule-summary-item"><span class="summary-label">已加選門數</span><strong class="summary-value"><span class="num">{{ mine|length }}</span><span class="summary-unit">門</span></strong></div>
-  {% if profile %}<div class="schedule-summary-class"><span class="avatar" aria-hidden="true">{{ profile.class_group.name_zh|slice:":1" }}</span><span><span class="summary-label">目前班級</span><strong>{{ profile.class_group.name_zh }}（{{ profile.class_group.code }}）</strong></span></div>{% endif %}
-</section>
-
-<p class="site-disclaimer">本站為模擬選課系統，非 NTUB 正式校務選課紀錄。</p>
+</header>
 
 {% if snapshot %}
-<div class="schedule-info-strip"><span>班級官方課表 · {{ snapshot.term.code }} · {{ official_courses_count }} 門課程</span><details class="schedule-info-tip"><summary aria-label="官方課程學分說明"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg></summary><span>官方課程不一定都是必修；官方課程與活動都不計入本站學分。</span></details></div>
+<div class="schedule-legend-row">
+  <div class="wk-legend" aria-label="課程類型圖例">
+    <span class="wk-key wk-key--official">班級官方課程</span>
+    <span class="wk-key wk-key--activity">官方活動</span>
+    <span class="wk-key wk-key--enrolled">個人加選</span>
+    <span class="wk-key wk-key--merged">官方課程＋本站加選</span>
+  </div>
+  <span class="schedule-official-note">班級官方課表 · {{ snapshot.term.code }} · {{ official_courses_count }} 門課程</span>
+  <details class="schedule-info-tip"><summary aria-label="官方課程學分說明"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg></summary><span>官方課程不一定都是必修；官方活動只是時間框架，兩者都不計入本站學分。</span></details>
+</div>
 {% elif profile %}
 <p class="schedule-source schedule-source--empty">
   目前學期（{{ term.code|default:"未設定" }}）沒有這個班級的官方課表快照，下方只顯示你自己加選的課程。
@@ -39,13 +43,7 @@
 {% endif %}
 
 {% if grid.items %}
-<div class="panel week-wrap">
-  <div class="wk-legend">
-    <span class="wk-key wk-key--official">班級官方課程</span>
-    <span class="wk-key wk-key--activity">官方活動</span>
-    <span class="wk-key wk-key--enrolled">個人加選</span>
-    <span class="wk-key wk-key--merged">官方課程＋本站加選</span>
-  </div>
+<div class="week-wrap">
   <div class="week-grid" style="--periods: {{ grid.periods }}">
     <div class="wk-head" role="row">
       <div class="wk-corner" role="columnheader"><span aria-hidden="true">節</span><span class="sr-only">節次</span></div>
@@ -56,31 +54,28 @@
     <div class="wk-body">
       <div class="wk-times" role="rowheader">
         {% for p in grid.period_labels %}
-        <div class="wk-time">{{ p }}</div>
+        <div class="wk-time"><span>{{ p }}</span><small>{% if p == 1 %}08:10{% endif %}</small></div>
         {% endfor %}
       </div>
       {% for day_no, day_label, day_items in grid.day_columns %}
-      <div class="wk-col" role="gridcell" data-day="{{ day_no }}" style="grid-column: {{ forloop.counter|add:"1" }};">
+      <div class="wk-col{% if day_no >= 6 and not day_items %} wk-col--empty-weekend{% endif %}" role="gridcell" data-day="{{ day_no }}" style="grid-column: {{ forloop.counter|add:"1" }};">
         {% for item in day_items %}
         <div class="wk-slot wk-slot--{{ item.kind }}{% if item.conflict %} wk-slot--conflict{% endif %}"
              style="--top: {{ item.row_offset }}; --span: {{ item.span }}; --left: {{ item.left_pct }}%; --width: {{ item.width_pct }}%;"
              role="gridcell"
-             title="{{ item.kind_label }} · {{ item.title }} · {{ day_label }}第{{ item.start_period }}至{{ item.end_period }}節 · {{ item.meta }}"
+             title="{{ item.kind_label }} · {{ item.title }} · {{ item.subtitle }} · {{ day_label }}第{{ item.start_period }}至{{ item.end_period }}節 · {{ item.meta }}"
              aria-label="{{ item.kind_label }}：{{ item.title }}，{{ day_label }}第{{ item.start_period }}至{{ item.end_period }}節{% if item.conflict %}，時間衝突{% endif %}">
           {% if item.url %}
           <a class="wk-slot-link" href="{{ item.url }}">
             <span class="wk-slot-name">{{ item.title }}</span>
-            <span class="wk-slot-sub">{{ item.subtitle }}</span>
-            {% if item.meta %}<span class="wk-slot-meta">{{ item.meta }}</span>{% endif %}
+            {% if item.meta %}<span class="wk-slot-room" data-slot-kind="{{ item.kind }}">{{ item.meta }}</span>{% endif %}
           </a>
           {% else %}
           <span class="wk-slot-link">
             <span class="wk-slot-name">{{ item.title }}</span>
-            <span class="wk-slot-sub">{{ item.subtitle }}</span>
-            {% if item.meta %}<span class="wk-slot-meta">{{ item.meta }}</span>{% endif %}
+            {% if item.meta %}<span class="wk-slot-room" data-slot-kind="{{ item.kind }}">{{ item.meta }}</span>{% endif %}
           </span>
           {% endif %}
-          <span class="wk-slot-tag">{{ item.kind_label }}</span>
           {% if item.conflict %}<span class="wk-slot-warn">衝突</span>{% endif %}
         </div>
         {% endfor %}
@@ -103,16 +98,12 @@
   </div>
   <ul class="courses">
     {% for row in official_course_rows %}
-    <li class="course-row course-row--official">
-      <div class="identity">
-        <span class="course-name">{{ row.name }}</span>
-        <p class="course-meta">
-          {% if row.code %}{{ row.code }} · {% endif %}
-          {{ row.teacher|default:"教師未定" }} ·
-          {{ row.classroom|default:"教室未定" }} ·
-          {{ row.weekday_label }} 第{{ row.start_period }}-{{ row.end_period }}節
-        </p>
-      </div>
+    <li class="schedule-course-row schedule-course-row--official">
+      <span class="schedule-course-name">{{ row.name }}</span>
+      <span>{{ row.teacher|default:"教師未定" }}</span>
+      <span>{{ row.classroom|default:"教室未定" }}</span>
+      <span>{{ row.weekday_label }} 第{{ row.start_period }}-{{ row.end_period }}節</span>
+      <span>官方課程</span>
     </li>
     {% empty %}
     <li class="empty">這個班級在 {{ snapshot.term.code }} 學期沒有官方課程資料。</li>
@@ -125,11 +116,12 @@
   <div class="mine-head"><h2>已選課程</h2><span class="num">{{ mine|length }} 門</span></div>
   <ul class="courses">
     {% for s in mine %}
-    <li class="course-row">
-      <div class="identity">
-        <a class="course-name" href="{% url 'course_detail' s.course.pk %}">{{ s.course.name }}</a>
-        <p class="course-meta">{{ s.course.code }} · {{ s.course.teacher }} · {{ s.label_display }} · {{ s.time_display }} · {{ s.room|default:"教室未定" }} · {{ s.course.credits }} 學分{% if s.official_entry %} · 官方課表：{{ s.official_entry.teacher_name|default:"教師未定" }} {{ s.official_entry.classroom|default:"教室未定" }}{% endif %}</p>
-      </div>
+    <li class="schedule-course-row">
+      <a class="schedule-course-name" href="{% url 'course_detail' s.course.pk %}">{{ s.course.name }}</a>
+      <span>{{ s.course.teacher }}</span>
+      <span>{{ s.room|default:"教室未定" }}</span>
+      <span>{{ s.time_display }}</span>
+      <span>{{ s.course.credits }} 學分</span>
       <div class="action">{% include "courses/_action.html" with section=s action=s.action next=request.path %}</div>
     </li>
     {% empty %}
@@ -137,15 +129,37 @@
     {% endfor %}
   </ul>
 </section>
+<footer class="schedule-footer">本站為模擬選課系統，非 NTUB 正式校務選課紀錄。</footer>
+<button class="back-to-top" id="back-to-top" type="button" aria-label="回到最上方" title="回到最上方" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg></button>
 {% endblock %}
 
 {% block extra_js %}
 <script>
 (function () {
-  var weekday = new Date().getDay();
-  if (weekday < 1 || weekday > 7) return;
-  document.querySelectorAll("[data-day]").forEach(function (item) {
-    if (Number(item.dataset.day) === weekday) item.classList.add("is-today");
+  var weekday = new Date().getDay() || 7;
+  if (weekday >= 1 && weekday <= 7) {
+    document.querySelectorAll("[data-day]").forEach(function (item) {
+      if (Number(item.dataset.day) === weekday) item.classList.add("is-today");
+    });
+  }
+  document.querySelectorAll(".wk-slot-room").forEach(function (room) {
+    var kind = room.dataset.slotKind;
+    var value = room.textContent.trim();
+    if (kind === "enrollment") value = value.split(" · ")[0];
+    if (kind === "official_enrollment") {
+      var localInfo = value.split(" · 本站 ")[1] || "";
+      value = localInfo.lastIndexOf(" ") > 0 ? localInfo.slice(0, localInfo.lastIndexOf(" ")) : "";
+    }
+    room.textContent = value;
+    if (!value) room.remove();
+  });
+  var backToTop = document.getElementById("back-to-top");
+  if (!backToTop) return;
+  function updateBackToTop() { backToTop.hidden = window.scrollY < 120; }
+  window.addEventListener("scroll", updateBackToTop, { passive: true });
+  updateBackToTop();
+  backToTop.addEventListener("click", function () {
+    window.scrollTo({ top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   });
 })();
 </script>

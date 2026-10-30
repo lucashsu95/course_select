@@ -232,6 +232,7 @@
   var sidebar = document.getElementById("app-sidebar");
   var backdrop = document.getElementById("sidebar-backdrop");
   var toggle = document.getElementById("sidebar-toggle");
+  var collapseToggle = document.getElementById("sidebar-collapse-toggle");
 
   function setSidebar(open) {
     document.body.classList.toggle("sidebar-open", open);
@@ -242,6 +243,14 @@
   if (toggle) {
     toggle.addEventListener("click", function () {
       setSidebar(!document.body.classList.contains("sidebar-open"));
+    });
+  }
+  if (collapseToggle) {
+    collapseToggle.addEventListener("click", function () {
+      var collapsed = document.body.classList.toggle("sidebar-collapsed");
+      collapseToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      collapseToggle.setAttribute("aria-label", collapsed ? "展開側邊欄" : "收合側邊欄");
+      collapseToggle.setAttribute("title", collapsed ? "展開側邊欄" : "收合側邊欄");
     });
   }
   if (sidebar) {
