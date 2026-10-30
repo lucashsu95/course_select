@@ -90,6 +90,12 @@ uv run manage.py test
 
 Google 登入另有 `courses/tests/test_auth.py`：登入成功、非 NTUB 信箱拒絕、未驗證信箱拒絕、登出、Admin 帳密登入。測試會假造 Google 的回應（mock 掉換 token 與 id_token 解析），不連真實 Google。
 
+## UI 品牌資源
+
+側欄／頂部 Logo 目前引用一張公開縮圖（見 `courses/templates/courses/_brand.html`）。若該圖無法載入，會改顯示內嵌佔位 SVG。**請替換為國立臺北商業大學官方 Logo 檔案**（建議放到 `courses/static/img/ntub-logo.png` 後改 template 路徑）。
+
+設計 token 集中在 `courses/static/css/tokens.css`（北商紫 `#5B2A86`、語意色、課表色票、圓角與陰影）。共用元件樣式在 `courses/static/css/components.css`，互動腳本在 `courses/static/js/ui.js`（`showToast({type, title, message})`）。
+
 ## 專案結構
 
 ```

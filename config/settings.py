@@ -35,6 +35,7 @@ TEMPLATES = [{
         "django.contrib.auth.context_processors.auth",
         "django.contrib.messages.context_processors.messages",
         "courses.context_processors.waitlist_banner",
+        "courses.context_processors.ui_shell",
     ]},
 }]
 DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3"}}

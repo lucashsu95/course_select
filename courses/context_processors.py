@@ -1,5 +1,13 @@
 """模板 context processors。"""
 from . import waitlist
+from .models import Term
+
+
+def ui_shell(request):
+    """App shell 需要的顯示資料（學期代碼）。不改業務邏輯。"""
+    if request.path.startswith("/admin/"):
+        return {}
+    return {"current_term": Term.current()}
 
 
 def waitlist_banner(request):

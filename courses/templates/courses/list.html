@@ -27,7 +27,7 @@
   <span>課程</span><span>課號</span><span>時間</span><span class="right">學分</span><span class="right">名額（本站模擬）</span><span></span>
 </div>
 {% if show_empty_enroll_note %}
-<p class="empty-state">
+<p class="policy-note">
   目前沒有可加選的課程：這個學期的開課都還沒有對你的班級開放（政策未發布、不開放自行加選，
   或你尚未設定學籍）。
 </p>
@@ -36,7 +36,14 @@
   {% for s in sections %}
   {% include "courses/_section_row.html" with s=s next=request.get_full_path show_prereq_marks=show_prereq_marks %}
   {% empty %}
-  <li class="empty">目前沒有可選課程。{% if q or day or slot %}<a href="{% url 'course_list' %}">清除篩選</a>{% endif %}</li>
+  <li>
+    {% url 'course_list' as clear_url %}
+    {% if q or day or slot %}
+      {% include "courses/_empty.html" with title="找不到符合的課程" text="試試其他關鍵字，或清除星期／時段篩選。" action_url=clear_url action_label="清除篩選" %}
+    {% else %}
+      {% include "courses/_empty.html" with title="目前沒有可選課程" text="這個學期還沒有對你的班級開放加選的班別。" %}
+    {% endif %}
+  </li>
   {% endfor %}
 </ul>
 {% endblock %}

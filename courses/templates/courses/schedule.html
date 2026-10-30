@@ -127,7 +127,7 @@
       <div class="action">{% include "courses/_action.html" with section=s action=s.action next=request.path %}</div>
     </li>
     {% empty %}
-    <li class="empty">還沒有選課，去 <a href="{% url 'course_list' %}">搜尋課程</a> 看看吧。</li>
+    <li>{% url 'course_list' as enroll_url %}{% include "courses/_empty.html" with title="還沒有加選課程" text="官方課程會顯示在上方週課表；自行加選的課會列在這裡。" action_url=enroll_url action_label="前往選課" %}</li>
     {% endfor %}
   </ul>
 </section>

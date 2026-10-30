@@ -19,7 +19,8 @@
       {% if s.prereq_list %}<span class="c-prereq">先修：{% for c, done in s.prereq_list %}{{ c.code }}{% if show_prereq_marks %}{% if done %}✓{% else %}<span class="prereq-missing">未修</span>{% endif %}{% endif %}{% if not forloop.last %}、{% endif %}{% endfor %}</span>{% endif %}
     {% endif %}
   </div>
-  <div class="seats">
+  {% widthratio s.enrolled s.capacity 100 as seat_pct %}
+  <div class="seats quota {% if s.is_full or seat_pct|add:0 >= 100 %}quota--full{% elif seat_pct|add:0 >= 70 %}quota--warn{% else %}quota--ok{% endif %}">
     <span class="seats-num num">{{ s.enrolled }}<span class="of"> / {{ s.capacity }}</span></span>
     <span class="seats-tag">本站模擬</span>
     {% if s.is_full %}<span class="full-flag">額滿</span>{% endif %}
