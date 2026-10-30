@@ -784,7 +784,7 @@ body.schedule-page { background: #fff; }
 .week-grid:has(.wk-col--empty-weekend[data-day="6"]):has(.wk-col--empty-weekend[data-day="7"]) { --week-columns: 56px repeat(5, minmax(0, 1fr)) minmax(0, .4fr) minmax(0, .4fr); }
 .week-grid:has(.wk-col--empty-weekend[data-day="6"]):not(:has(.wk-col--empty-weekend[data-day="7"])) { --week-columns: 56px repeat(5, minmax(0, 1fr)) minmax(0, .4fr) minmax(0, 1fr); }
 .week-grid:has(.wk-col--empty-weekend[data-day="7"]):not(:has(.wk-col--empty-weekend[data-day="6"])) { --week-columns: 56px repeat(6, minmax(0, 1fr)) minmax(0, .4fr); }
-.wk-head { display: grid; grid-template-columns: var(--week-columns); position: sticky; top: var(--header-height); z-index: 3; background: #fff; }
+.wk-head { display: grid; grid-template-columns: var(--week-columns); position: relative; z-index: 3; background: #fff; }
 .wk-corner { padding: 8px 4px; color: var(--text-muted); font-size: 12px; text-align: center; }
 .wk-dayhead { position: relative; padding: 8px 4px 9px; border-bottom: 1px solid var(--border-subtle); color: var(--text-muted); font-size: 12px; font-weight: 500; text-align: center; }
 .wk-dayhead.is-today { color: var(--primary-800); font-weight: 700; }
