@@ -78,16 +78,21 @@ class TeacherRoleTests(CourseTestCase):
         self.assertEqual(self.client.get(reverse("course_roster", args=[self.a.course_id])).status_code, 404)
 
     def test_anonymous_is_redirected_to_login(self):
-        for name, args in [("teaching", []), ("course_roster", [self.a.course_id])]:
+        for name, args in [
+            ("course_list", []),
+            ("course_detail", [self.a.course_id]),
+            ("my_schedule", []),
+            ("teaching", []),
+            ("course_roster", [self.a.course_id]),
+        ]:
             r = self.client.get(reverse(name, args=args))
             self.assertEqual(r.status_code, 302)
             self.assertIn(reverse("login"), r["Location"])
-        self.assertEqual(self.client.get(reverse("course_list")).status_code, 200)
+            self.assertIn("next=", r["Location"])
 
     def test_roster_link_only_for_teacher(self):
         detail = reverse("course_detail", args=[self.a.course_id])
         roster = reverse("course_roster", args=[self.a.course_id])
-        self.assertNotContains(self.client.get(detail), roster)
         self.client.force_login(self.student)
         self.assertNotContains(self.client.get(detail), roster)
         self.client.force_login(self.u)
@@ -131,6 +136,7 @@ class SlotFilterTests(CourseTestCase):
         self.mid = self.section("MID1", "A", 5, 6)         # start 5，週一
         self.pm = self.section("PM1", "A", 8, 9, day=3)    # start 8，週三
         self.eve = self.section("EVE1", "A", 11, 12, day=3)  # start 11，週三
+        self.client.force_login(self.u)
 
     def codes(self, **params):
         r = self.client.get(reverse("course_list"), params)

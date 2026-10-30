@@ -8,10 +8,17 @@
   </div>
 </div>
 
+<ol class="onboarding-steps" aria-label="設定流程">
+  <li class="is-complete"><span>1</span><strong>登入</strong></li>
+  <li class="is-current" aria-current="step"><span>2</span><strong>設定學籍</strong></li>
+  <li><span>3</span><strong>開始選課</strong></li>
+</ol>
+
 <section class="panel setup-panel">
-  <div class="setup-identity">
-    <span class="who-name">{{ google_name }}</span>
-    <span class="who-meta">{{ google_email }}</span>
+  <div class="setup-identity setup-identity-card">
+    <span class="avatar avatar-large" aria-hidden="true">{{ google_name|default:google_email|slice:":1"|upper }}</span>
+    <span class="setup-identity-copy"><strong class="who-name">{{ google_name }}</strong><span class="who-meta">{{ google_email }}</span></span>
+    <span class="readonly-tag">Google 帳號</span>
   </div>
 
   <form method="post" class="setup-form" id="setup-form" novalidate>
@@ -23,6 +30,7 @@
     <div class="setup-row">
       <div class="setup-field">
         <label for="id_program_type">學制</label>
+        <small>選擇你的修業制度</small>
         <select name="program_type" id="id_program_type" required>
           <option value="">請選擇學制</option>
           {% for pt in cascade.program_types %}
@@ -34,6 +42,7 @@
 
       <div class="setup-field">
         <label for="id_department">系所</label>
+        <small>依學制篩選可選系所</small>
         <select name="department" id="id_department" required>
           <option value="">請選擇系所</option>
           {% for d in cascade.departments %}
@@ -47,6 +56,7 @@
     <div class="setup-row">
       <div class="setup-field">
         <label for="id_grade">年級</label>
+        <small>選擇目前就讀年級</small>
         <select name="grade" id="id_grade" required>
           <option value="">請選擇年級</option>
           {% for g in cascade.grades %}
@@ -58,6 +68,7 @@
 
       <div class="setup-field">
         <label for="id_class_group">班級</label>
+        <small>選擇所屬班級</small>
         <select name="class_group" id="id_class_group" required>
           <option value="">請選擇班級</option>
           {% for c in cascade.class_groups %}
@@ -68,7 +79,8 @@
       </div>
     </div>
 
-    <button class="btn btn-primary" type="submit">完成設定</button>
+    <p class="class-preview" id="class-preview" aria-live="polite">請依序選擇學制、系所、年級與班級</p>
+    <button class="btn btn-primary" type="submit">完成設定並開始選課</button>
   </form>
 </section>
 
@@ -125,7 +137,27 @@
   dept.addEventListener("change", refreshGrades);
   grade.addEventListener("change", refreshGroups);
 
+  var preview = document.getElementById("class-preview");
+  function updatePreview() {
+    var selections = [pt, dept, grade, group].map(function (select) {
+      return select.options[select.selectedIndex];
+    });
+    if (selections.some(function (option) { return !option || !option.value; })) {
+      preview.textContent = "請依序選擇學制、系所、年級與班級";
+      preview.classList.remove("is-ready");
+      return;
+    }
+    var classText = selections[3].textContent.trim();
+    var codeMatch = classText.match(/[（(]([^）)]+)[）)]$/);
+    var className = classText.replace(/[（(][^）)]*[）)]$/, "");
+    preview.textContent = "你的班級：" + selections[0].textContent.split(/[（(]/)[0].trim() + " " + selections[1].textContent.split(/[（(]/)[0].trim() + " " + selections[2].textContent.trim() + " " + className + (codeMatch ? " (" + codeMatch[1] + ")" : "");
+    preview.classList.add("is-ready");
+  }
+
+  [pt, dept, grade, group].forEach(function (select) { select.addEventListener("change", updatePreview); });
+
   refreshDepartments();
+  updatePreview();
 })();
 </script>
 {% endblock %}

@@ -1,7 +1,9 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-change-me")
 DEBUG = os.environ.get("DEBUG", "1") == "1"
 ALLOWED_HOSTS = ["*"] if DEBUG else os.environ.get("ALLOWED_HOSTS", "").split(",")
@@ -33,36 +35,42 @@ MIDDLEWARE = [
     "courses.middleware.AcademicProfileRequiredMiddleware",
 ]
 ROOT_URLCONF = "config.urls"
-TEMPLATES = [{
-    "BACKEND": "django.template.backends.django.DjangoTemplates",
-    # 專案層級的模板覆寫（優先於套件/app 內的同名模板）。
-    # 目前放 templates/admin/base.html：修正 AdminLTE 把 object-tools 塞在
-    # {% block content %} 內，導致 Django 的 change_list / change_form 覆寫
-    # content 後「新增」按鈕消失的問題。
-    "DIRS": [BASE_DIR / "templates"],
-    # django-components 要求明確列出 loaders，所以 APP_DIRS 必須是 False。
-    # app_directories.Loader 仍在清單裡，app 內的模板照樣找得到。
-    "APP_DIRS": False,
-    "OPTIONS": {
-        "context_processors": [
-            "django.template.context_processors.request",
-            "django.contrib.auth.context_processors.auth",
-            "django.contrib.messages.context_processors.messages",
-            "django_adminlte4.context_processors.adminlte",
-            "courses.context_processors.waitlist_banner",
-        ],
-        "loaders": [(
-            "django.template.loaders.cached.Loader",
-            [
-                "django.template.loaders.filesystem.Loader",
-                "django.template.loaders.app_directories.Loader",
-                "django_components.template_loader.Loader",
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [BASE_DIR / "templates"],
+        "APP_DIRS": False,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+
+                # AdminLTE 4
+                "django_adminlte4.context_processors.adminlte",
+
+                # 原本的課程功能
+                "courses.context_processors.waitlist_banner",
+
+                # 佳欣新增的學生端 UI
+                "courses.context_processors.ui_shell",
             ],
-        )],
-        # 讓模板可以直接用 {% component %} 而不用 {% load component_tags %}。
-        "builtins": ["django_components.templatetags.component_tags"],
+            "loaders": [
+                (
+                    "django.template.loaders.cached.Loader",
+                    [
+                        "django.template.loaders.filesystem.Loader",
+                        "django.template.loaders.app_directories.Loader",
+                        "django_components.template_loader.Loader",
+                    ],
+                ),
+            ],
+            "builtins": [
+                "django_components.templatetags.component_tags",
+            ],
+        },
     },
-}]
+]
 # AdminLTE 4 的元件（component）住在套件的 components/ 目錄，開啟自動探索即可。
 COMPONENTS = {"dirs": [], "app_dirs": ["components"], "autodiscover": True}
 # 元件目錄裡的 .css/.js 也要能 collectstatic，否則 {% component_css_dependencies %}
@@ -116,20 +124,10 @@ MAX_CREDITS = 25  # 學分上限
 # 不需要 Node 就能 collectstatic 並使用。
 ADMINLTE = {
     "assets_mode": "static",
-    "title": "選課系統",
-    "logo": "<b>選課</b>系統",
-    "logo_alt_text": "選課系統",
-    "admin_brand": "選課系統後台",
+    "title": "NTUB 課程管理",
+    "logo": "<b>NTUB</b> 課程管理",
+    "admin_brand": "NTUB 課程管理",
     "sidebar_theme": "dark",
-    "menu": [
-        {"header": "選課"},
-        {"text": "搜尋課程", "url": "/", "icon": "bi bi-search"},
-        {"text": "我的課表", "url": "/my/", "icon": "bi bi-calendar-week"},
-        {"text": "個人資料", "url": "/me/profile/", "icon": "bi bi-person"},
-        {"text": "授課管理", "url": "/teaching/", "icon": "bi bi-person-workspace"},
-        {"header": "管理"},
-        {"text": "管理後台", "url": "/admin/", "icon": "bi bi-sliders"},
-    ],
 }
 
 # --- ngrok demo：只在 USE_NGROK=1 時生效 ---
