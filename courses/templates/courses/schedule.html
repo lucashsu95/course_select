@@ -54,7 +54,7 @@
     <div class="wk-body">
       <div class="wk-times" role="rowheader" style="grid-column: 1; grid-row: 1 / -1;">
         {% for p in grid.period_labels %}
-        <div class="wk-time"><span>{{ p }}</span><small>{% if p == 1 %}08:10{% endif %}</small></div>
+        <div class="wk-time"><span>{{ p }}</span></div>
         {% endfor %}
       </div>
       {% for day_no, day_label, day_items in grid.day_columns %}
