@@ -1,6 +1,8 @@
 from django import forms
 from django.contrib import admin
-from .models import Course, Enrollment, Section, Teacher, Term, Waitlist
+from .models import (AcademicCatalog, AcademicClassGroup, AcademicDepartment,
+                     AcademicProgramType, Course, Enrollment, Section, Teacher,
+                     Term, Waitlist)
 
 
 class CourseAdminForm(forms.ModelForm):
@@ -58,3 +60,41 @@ class WaitlistAdmin(admin.ModelAdmin):
     list_display = ["user", "section", "queued_at", "promoted_at"]
     list_filter = ["section__course__term"]
     list_select_related = ["user", "section", "section__course"]
+
+
+@admin.register(AcademicCatalog)
+class AcademicCatalogAdmin(admin.ModelAdmin):
+    list_display = ["version", "source_key", "status", "source_file_name",
+                    "class_group_count", "selectable_class_group_count", "imported_at"]
+    list_filter = ["source_key", "status"]
+    search_fields = ["version", "source_file_name", "file_sha256"]
+    date_hierarchy = "imported_at"
+    readonly_fields = ["source_file_name", "file_sha256", "source_row_count",
+                       "program_count", "department_count", "class_group_count",
+                       "selectable_class_group_count"]
+
+
+@admin.register(AcademicProgramType)
+class AcademicProgramTypeAdmin(admin.ModelAdmin):
+    list_display = ["code", "name_zh", "catalog", "is_registration_selectable", "is_active", "sort_order"]
+    list_filter = ["catalog", "is_registration_selectable", "is_active"]
+    search_fields = ["code", "name_zh"]
+    autocomplete_fields = ["catalog"]
+
+
+@admin.register(AcademicDepartment)
+class AcademicDepartmentAdmin(admin.ModelAdmin):
+    list_display = ["code", "name_zh", "program_type", "catalog", "is_registration_selectable", "is_active"]
+    list_filter = ["catalog", "program_type", "is_registration_selectable", "is_active"]
+    search_fields = ["code", "name_zh"]
+    autocomplete_fields = ["catalog", "program_type"]
+
+
+@admin.register(AcademicClassGroup)
+class AcademicClassGroupAdmin(admin.ModelAdmin):
+    list_display = ["code", "name_zh", "department", "grade_no", "section_code",
+                    "group_type", "is_registration_selectable", "is_active"]
+    list_filter = ["catalog", "department__program_type", "group_type",
+                   "is_registration_selectable", "is_active", "grade_no"]
+    search_fields = ["code", "name_zh", "department__code", "department__name_zh"]
+    autocomplete_fields = ["catalog", "department"]
