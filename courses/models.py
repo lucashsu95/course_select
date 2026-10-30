@@ -145,3 +145,127 @@ class Waitlist(models.Model):
 
     def __str__(self):
         return f"{self.user} 等 {self.section}"
+
+
+# --- NTUB 學籍目錄 ---------------------------------------------------------------
+# 來源：ntubook_academic_missing_rows_restore.sql（NTUB 校方下發的學籍班級清單）
+# 三層結構：學制（AcademicProgramType）→ 系所（AcademicDepartment）→ 班級（AcademicClassGroup），
+# 全部掛在一次匯入批次（AcademicCatalog）底下，讓每筆資料都能回溯來源檔名與雜湊。
+
+
+class AcademicCatalog(models.Model):
+    """一次學籍目錄匯入批次：對應來源 SQL 的 academic_catalogs / academic_catalog_sources。"""
+
+    version = models.CharField("版本", max_length=100, unique=True)  # 例如 ntub-20260724-755fe94f
+    source_key = models.CharField("來源代碼", max_length=50, default="ntub")
+    source_name = models.CharField("來源名稱", max_length=100, blank=True)
+    last_successful_sync_at = models.DateTimeField("最後成功同步時間", null=True, blank=True)
+    schema_version = models.PositiveSmallIntegerField("結構版本", default=1)
+    source_file_name = models.CharField("來源檔名", max_length=255, blank=True)
+    file_sha256 = models.CharField("來源檔雜湊", max_length=64, blank=True)
+    academic_year = models.CharField("學年度", max_length=20, null=True, blank=True)
+    term = models.CharField("學期", max_length=20, null=True, blank=True)
+    status = models.CharField("狀態", max_length=20, default="ACTIVE")
+    fetched_at = models.DateTimeField("擷取時間", null=True, blank=True)
+    imported_at = models.DateTimeField("匯入時間", null=True, blank=True)
+    source_row_count = models.PositiveIntegerField("來源列數", default=0)
+    program_count = models.PositiveIntegerField("學制數", default=0)
+    department_count = models.PositiveIntegerField("系所數", default=0)
+    class_group_count = models.PositiveIntegerField("班級數", default=0)
+    selectable_class_group_count = models.PositiveIntegerField("可選班級數", default=0)
+
+    class Meta:
+        ordering = ["-version"]
+        verbose_name = "學籍目錄批次"
+
+    def __str__(self):
+        return self.version
+
+
+class AcademicProgramType(models.Model):
+    """學制：例如 碩士班 / 四技日間部 / 二年制進修部。"""
+
+    catalog = models.ForeignKey(AcademicCatalog, on_delete=models.CASCADE,
+                                 related_name="program_types", verbose_name="目錄批次")
+    code = models.CharField("學制代碼", max_length=20)  # 例如 1 / 4 / S
+    name_zh = models.CharField("學制名稱", max_length=100, blank=True)
+    name_en = models.CharField("學制英文名稱", max_length=100, blank=True)
+    is_active = models.BooleanField("有效", default=True)
+    is_registration_selectable = models.BooleanField("可註冊", default=True)
+    sort_order = models.PositiveIntegerField("排序", default=0)
+    source_last_seen_at = models.DateTimeField("來源最後出現時間", null=True, blank=True)
+
+    class Meta:
+        ordering = ["sort_order", "code"]
+        verbose_name = "學制"
+        verbose_name_plural = "學制"
+        constraints = [
+            models.UniqueConstraint(fields=["code"], name="academic_program_type_code_unique"),
+        ]
+
+    def __str__(self):
+        return f"{self.code} {self.name_zh}".strip()
+
+
+class AcademicDepartment(models.Model):
+    """系所：隸屬於某個學制，例如 資訊管理系（406）隸屬四技日間部。"""
+
+    catalog = models.ForeignKey(AcademicCatalog, on_delete=models.CASCADE,
+                                 related_name="departments", verbose_name="目錄批次")
+    program_type = models.ForeignKey(AcademicProgramType, on_delete=models.PROTECT,
+                                     related_name="departments", verbose_name="學制")
+    code = models.CharField("系所代碼", max_length=20)  # 例如 406
+    name_zh = models.CharField("系所名稱", max_length=100, blank=True)
+    name_en = models.CharField("系所英文名稱", max_length=100, blank=True)
+    is_active = models.BooleanField("有效", default=True)
+    is_registration_selectable = models.BooleanField("可註冊", default=True)
+    sort_order = models.PositiveIntegerField("排序", default=0)
+    unit_type = models.CharField("單位類型", max_length=32, blank=True)  # 例如 ACADEMIC
+    source_last_seen_at = models.DateTimeField("來源最後出現時間", null=True, blank=True)
+
+    class Meta:
+        ordering = ["program_type__sort_order", "code"]
+        verbose_name = "系所"
+        verbose_name_plural = "系所"
+        constraints = [
+            models.UniqueConstraint(fields=["code"], name="academic_department_code_unique"),
+        ]
+
+    def __str__(self):
+        return f"{self.code} {self.name_zh}".strip()
+
+
+class AcademicClassGroup(models.Model):
+    """班級：學校開的班，學生選課時的單位，例如 40620A（四技資管二年甲班）。"""
+
+    GROUP_TYPES = [
+        ("COHORT", "一般班級"),
+        ("GENERAL_EDUCATION", "通識教育"),
+        ("PHYSICAL_EDUCATION", "體育"),
+        ("MILITARY_EDUCATION", "軍訓"),
+    ]
+
+    catalog = models.ForeignKey(AcademicCatalog, on_delete=models.CASCADE,
+                                 related_name="class_groups", verbose_name="目錄批次")
+    department = models.ForeignKey(AcademicDepartment, on_delete=models.CASCADE,
+                                   related_name="class_groups", verbose_name="系所")
+    code = models.CharField("班級代碼", max_length=20)  # 例如 40620A
+    name_zh = models.CharField("班級名稱", max_length=100, blank=True)
+    grade_no = models.PositiveSmallIntegerField("年級", null=True, blank=True)
+    section_code = models.CharField("班級類型", max_length=10, null=True, blank=True)  # A / B / C / D
+    group_type = models.CharField("群組類型", max_length=32, choices=GROUP_TYPES, blank=True)
+    is_active = models.BooleanField("有效", default=True)
+    is_registration_selectable = models.BooleanField("可選", default=False)
+    sort_order = models.PositiveIntegerField("排序", default=0)
+    source_payload = models.JSONField("來源原始資料", default=dict, blank=True)
+
+    class Meta:
+        ordering = ["department__code", "code"]
+        verbose_name = "班級"
+        verbose_name_plural = "班級"
+        constraints = [
+            models.UniqueConstraint(fields=["code"], name="academic_class_group_code_unique"),
+        ]
+
+    def __str__(self):
+        return f"{self.code} {self.name_zh}".strip()
