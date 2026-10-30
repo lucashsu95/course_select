@@ -8,6 +8,7 @@
   </div>
 </div>
 {% if window %}<p class="term-window tw-{{ window.state }}">{{ window.text }}</p>{% endif %}
+<p class="site-disclaimer">本站為模擬選課系統，非 NTUB 正式校務選課紀錄。</p>
 
 <form class="filters" method="get" role="search">
   <input type="search" name="q" value="{{ q }}" placeholder="課名、課號或老師" aria-label="搜尋課程">
@@ -23,13 +24,19 @@
 </form>
 
 <div class="list-head" aria-hidden="true">
-  <span>課程</span><span>課號</span><span>時間</span><span class="right">學分</span><span class="right">名額</span><span></span>
+  <span>課程</span><span>課號</span><span>時間</span><span class="right">學分</span><span class="right">名額（本站模擬）</span><span></span>
 </div>
+{% if show_empty_enroll_note %}
+<p class="empty-state">
+  目前沒有可加選的課程：這個學期的開課都還沒有對你的班級開放（政策未發布、不開放自行加選，
+  或你尚未設定學籍）。
+</p>
+{% endif %}
 <ul class="courses">
   {% for s in sections %}
   {% include "courses/_section_row.html" with s=s next=request.get_full_path show_prereq_marks=show_prereq_marks %}
   {% empty %}
-  <li class="empty">找不到符合的課程。{% if q or day or slot %}<a href="{% url 'course_list' %}">清除篩選</a>{% endif %}</li>
+  <li class="empty">目前沒有可選課程。{% if q or day or slot %}<a href="{% url 'course_list' %}">清除篩選</a>{% endif %}</li>
   {% endfor %}
 </ul>
 {% endblock %}

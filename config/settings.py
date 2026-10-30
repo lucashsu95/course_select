@@ -23,6 +23,8 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "allauth.account.middleware.AccountMiddleware",
+    # 還沒做過首次學籍設定的 Google 學生，一律先導到 /onboarding/
+    "courses.middleware.AcademicProfileRequiredMiddleware",
 ]
 ROOT_URLCONF = "config.urls"
 TEMPLATES = [{
@@ -62,6 +64,8 @@ ACCOUNT_EMAIL_VERIFICATION = "none"
 # 不要用「信箱相同就自動連結既有帳號」，避免非 Google 的帳號被綁架
 SOCIALACCOUNT_EMAIL_AUTHENTICATION = False
 SOCIALACCOUNT_ADAPTER = "courses.adapters.NtubSocialAccountAdapter"
+# 登入後的預設導向（未完成學籍設定的學生 → /onboarding/）
+ACCOUNT_ADAPTER = "courses.account_adapter.NtubAccountAdapter"
 SOCIALACCOUNT_PROVIDERS = {"google": {
     "APP": {"client_id": os.environ.get("GOOGLE_CLIENT_ID", ""),
             "secret": os.environ.get("GOOGLE_CLIENT_SECRET", ""), "key": ""},

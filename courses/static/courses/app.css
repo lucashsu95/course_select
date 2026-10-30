@@ -298,6 +298,41 @@ h2 { font-size: var(--fs-section); font-weight: 600; }
 .course-name:hover { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
 .course-meta { margin-top: 4px; color: var(--muted); font-size: 13px; }
 
+/* 政策擋下的理由：看得到但不能加選時，列上要說明原因 */
+.policy-flag {
+  margin: 6px 0 0;
+  color: var(--pill-negative-ink);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* 名額是本站模擬選課的人數，不是學校即時選課人數 */
+.seats-tag {
+  display: inline-block;
+  margin-left: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* 空狀態：沒有可加選的課程時明確說明 */
+.empty-state {
+  margin: 8px 0 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius, 8px);
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* 系統定位聲明：本站是模擬系統，不是學校正式紀錄 */
+.site-disclaimer {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .seats-num { font-size: 15px; font-weight: 500; }
 .seats-num .of { color: var(--muted); font-size: 12px; font-weight: 400; }
 .track {
@@ -385,44 +420,206 @@ h2 { font-size: var(--fs-section); font-weight: 600; }
   padding: 8px 8px 4px;
   overflow-x: auto;
 }
-.week {
-  width: 100%;
-  min-width: 640px;
-  border-collapse: collapse;
-  table-layout: fixed;
+
+.schedule-class {
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 13px;
 }
-.week thead th {
-  padding: 10px 4px;
+.schedule-source {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.schedule-source--empty {
+  padding: 10px 12px;
+  border: 1px dashed var(--control);
+  border-radius: var(--radius-control);
+  background: var(--raised);
+}
+.schedule-conflict {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e6b8b8;
+  border-radius: var(--radius-control);
+  background: #fdeeee;
+  color: #7a2020;
+  font-size: 13px;
+}
+
+/* 圖例 */
+.wk-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 4px 4px 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.wk-key { display: inline-flex; align-items: center; gap: 6px; }
+.wk-key::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--control);
+}
+.wk-key--official::before { background: #fff6d6; border-color: #e2c46a; }
+.wk-key--activity::before { background: #f1f1f3; border-color: #d5d5dc; }
+.wk-key--enrolled::before { background: #e7f0fb; border-color: #9dc2e8; }
+.wk-key--merged::before { background: #eaf6ee; border-color: #8fc7a6; }
+
+/* 週課表：表頭與主體共用同一組欄寬，跨節次不會錯位 */
+.week-grid {
+  --wk-row-h: 58px;
+  --wk-gutter: 3px;
+  min-width: 860px;
+}
+.wk-head {
+  display: grid;
+  grid-template-columns: 44px repeat(7, minmax(0, 1fr));
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--surface);
+}
+.wk-corner {
+  padding: 8px 4px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+.wk-dayhead {
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--rule);
   color: var(--muted);
   font-size: 12px;
   font-weight: 500;
   text-align: center;
 }
-.week thead th:first-child { width: 44px; }
-.week tbody tr { border-top: 1px solid var(--rule); }
-.week tbody th {
+
+.wk-body {
+  display: grid;
+  grid-template-columns: 44px repeat(7, minmax(0, 1fr));
+  grid-template-rows: repeat(var(--periods), var(--wk-row-h));
+}
+.wk-times {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  display: grid;
+  grid-template-rows: repeat(var(--periods), var(--wk-row-h));
   position: sticky;
   left: 0;
-  z-index: 1;
+  z-index: 2;
   background: var(--surface);
+}
+.wk-time {
+  padding-top: 6px;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 400;
   text-align: center;
 }
-.week td { height: 56px; padding: 3px; vertical-align: top; }
-
-.slot {
-  display: block;
-  height: 100%;
-  padding: 7px 9px;
-  border-radius: var(--radius-control);
-  background: var(--accent-soft);
-  text-decoration: none;
+.wk-col {
+  grid-row: 1 / -1;
+  position: relative;
+  border-left: 1px solid var(--rule);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--wk-row-h) - 1px),
+    var(--rule) calc(var(--wk-row-h) - 1px),
+    var(--rule) var(--wk-row-h)
+  );
 }
-.slot:hover { background: var(--accent-track); }
-.slot-name { display: block; color: var(--accent-ink); font-size: 13px; font-weight: 500; line-height: 1.3; }
-.slot-meta { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+
+/* 時段方塊：位置與高度都由節次計算，同一天重疊的時段並排而不是互相覆蓋 */
+.wk-slot {
+  position: absolute;
+  top: calc(var(--top) * var(--wk-row-h) + var(--wk-gutter));
+  height: calc(var(--span) * var(--wk-row-h) - 2 * var(--wk-gutter));
+  left: calc(var(--left) + var(--wk-gutter));
+  width: calc(var(--width) - 2 * var(--wk-gutter));
+  padding: 6px 8px;
+  overflow: hidden;
+  border: 1px solid var(--control);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.wk-slot-link { display: block; color: inherit; text-decoration: none; }
+a.wk-slot-link:hover { text-decoration: underline; }
+.wk-slot-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+.wk-slot-sub { display: block; margin-top: 1px; color: var(--muted); font-size: 12px; }
+.wk-slot-meta { display: block; color: var(--muted); font-size: 11px; }
+.wk-slot-tag {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 6px;
+  border-radius: var(--radius-chip);
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* 班級官方課程：淺黃色 */
+.wk-slot--official_course {
+  border-color: #e2c46a;
+  background: #fff6d6;
+  color: #5c4712;
+}
+.wk-slot--official_course .wk-slot-sub,
+.wk-slot--official_course .wk-slot-meta { color: #7d6524; }
+
+/* 官方活動：淺灰色（只是時間框架，不是必修、也不計學分） */
+.wk-slot--official_activity {
+  border-color: #d5d5dc;
+  background: #f1f1f3;
+  color: #4a4a52;
+}
+.wk-slot--official_activity .wk-slot-sub,
+.wk-slot--official_activity .wk-slot-meta { color: #6d6d76; }
+
+/* 個人加選：淺藍色 */
+.wk-slot--enrollment {
+  border-color: #9dc2e8;
+  background: #e7f0fb;
+  color: #1d3f60;
+}
+.wk-slot--enrollment .wk-slot-sub,
+.wk-slot--enrollment .wk-slot-meta { color: #40607f; }
+
+/* 官方課表＋本站加選：同一門課合併成一個時段（淺綠色） */
+.wk-slot--official_enrollment {
+  border-color: #8fc7a6;
+  background: #eaf6ee;
+  color: #23543a;
+}
+.wk-slot--official_enrollment .wk-slot-sub,
+.wk-slot--official_enrollment .wk-slot-meta { color: #3f6d54; }
+
+/* 衝突：加框線與標籤，兩門課都看得見 */
+.wk-slot--conflict {
+  border-width: 2px;
+  border-color: #c4242a;
+  box-shadow: 0 0 0 2px rgba(196, 36, 42, 0.18);
+}
+.wk-slot-warn {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 6px;
+  border-radius: var(--radius-chip);
+  background: #c4242a;
+  color: #fff;
+  font-size: 11px;
+}
+
+.course-row--official .course-name { color: var(--text); }
 
 .mine { margin-top: 40px; }
 .mine-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 4px; }
@@ -530,6 +727,33 @@ h2 { font-size: var(--fs-section); font-weight: 600; }
 .login-card h1 { font-size: 22px; margin-bottom: 10px; }
 .login-card .login-note { color: var(--muted); font-size: 14px; line-height: 1.6; margin-bottom: 24px; }
 .login-card .login-btn { width: 100%; }
+
+/* 學籍設定（首次 onboarding）與個人資料 */
+.setup-panel { margin-top: 20px; }
+.setup-panel + .setup-panel { margin-top: 16px; }
+.setup-title { font-size: var(--fs-section); margin-bottom: 12px; }
+.setup-identity { display: flex; flex-direction: column; gap: 2px; margin-bottom: 18px; }
+.setup-form { display: flex; flex-direction: column; gap: 16px; align-items: flex-start; }
+.setup-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; width: 100%; max-width: 720px; }
+.setup-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.setup-field label { font-size: 13px; color: var(--muted); }
+.setup-field select {
+  height: 38px;
+  min-width: 0;
+  padding: 0 12px;
+  border: 1px solid var(--control);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-size: 14px;
+}
+.setup-field select:hover { border-color: var(--muted); }
+.field-error { color: var(--negative); font-size: 12px; }
+.profile-list { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 10px 12px; font-size: 14px; }
+.profile-list dt { color: var(--muted); font-size: 13px; }
+.profile-list dd { margin: 0; }
+@media (max-width: 720px) {
+  .setup-row { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* 表單送出中：停用按鈕＋轉圈，讓使用者知道有在處理 */
 .btn:disabled { opacity: 0.55; cursor: default; }

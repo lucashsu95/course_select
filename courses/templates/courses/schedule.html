@@ -4,37 +4,116 @@
 <div class="page-head">
   <div>
     <h1>我的課表</h1>
-    <p class="sub"><span class="num">{{ total }}</span> / <span class="num">{{ max }}</span> 學分 · <span class="num">{{ mine|length }}</span> 門課</p>
+    <p class="sub">
+      {% if term %}<span class="num">{{ term.code }}</span> 學期 · {% endif %}
+      <span class="num">{{ total }}</span> / <span class="num">{{ max }}</span> 學分 · <span class="num">{{ mine|length }}</span> 門已加選
+    </p>
   </div>
 </div>
 
+{% if profile %}
+<p class="schedule-class">班級：{{ profile.class_group.name_zh }}（{{ profile.class_group.code }}）</p>
+{% endif %}
+<p class="site-disclaimer">本站為模擬選課系統，非 NTUB 正式校務選課紀錄。</p>
+
+{% if snapshot %}
+<p class="schedule-source">
+  班級官方課表：{{ snapshot.term.code }} 學期官方公布課表，共
+  <span class="num">{{ official_courses_count }}</span> 門班級官方課程。
+  官方課程不一定都是必修，官方活動只是時間框架，兩者都不計入學分。
+</p>
+{% elif profile %}
+<p class="schedule-source schedule-source--empty">
+  目前學期（{{ term.code|default:"未設定" }}）沒有這個班級的官方課表快照，下方只顯示你自己加選的課程。
+</p>
+{% else %}
+<p class="schedule-source schedule-source--empty">
+  尚未設定學籍，因此沒有班級官方課表；下方只顯示你自己加選的課程。
+</p>
+{% endif %}
+
+{% if grid.has_conflict %}
+<p class="schedule-conflict" role="status">
+  有 <span class="num">{{ grid.conflict_count }}</span> 個時段互相重疊（已標示「衝突」），請確認時間是否打架。
+</p>
+{% endif %}
+
 <div class="panel week-wrap">
-  <table class="week" aria-label="週課表">
-    <thead>
-      <tr><th scope="col"><span aria-hidden="true">節</span><span class="sr-only">節次</span></th>{% for d in days %}<th scope="col">{{ d }}</th>{% endfor %}</tr>
-    </thead>
-    <tbody>
-      {% for p, cells in rows %}
-      <tr>
-        <th scope="row">{{ p }}</th>
-        {% for c in cells %}
-          {% if c %}
-            {% if c.start_period == p %}
-            <td rowspan="{{ c.periods }}"><a class="slot" href="{% url 'course_detail' c.course.pk %}">
-              <span class="slot-name">{{ c.course.name }} {{ c.label_display }}</span>
-              <span class="slot-meta">{{ c.room|default:"教室未定" }} · {{ c.course.teacher }}</span>
-            </a></td>
-            {% endif %}
-          {% else %}
-            <td></td>
-          {% endif %}
-        {% endfor %}
-      </tr>
+  <div class="wk-legend">
+    <span class="wk-key wk-key--official">班級官方課程</span>
+    <span class="wk-key wk-key--activity">官方活動</span>
+    <span class="wk-key wk-key--enrolled">個人加選</span>
+    <span class="wk-key wk-key--merged">官方課程＋本站加選</span>
+  </div>
+  <div class="week-grid" style="--periods: {{ grid.periods }}">
+    <div class="wk-head" role="row">
+      <div class="wk-corner" role="columnheader"><span aria-hidden="true">節</span><span class="sr-only">節次</span></div>
+      {% for day_no, day_label in grid.days %}
+      <div class="wk-dayhead" role="columnheader">{{ day_label }}</div>
       {% endfor %}
-    </tbody>
-  </table>
+    </div>
+    <div class="wk-body">
+      <div class="wk-times" role="rowheader">
+        {% for p in grid.period_labels %}
+        <div class="wk-time">{{ p }}</div>
+        {% endfor %}
+      </div>
+      {% for day_no, day_label, day_items in grid.day_columns %}
+      <div class="wk-col" role="gridcell" data-day="{{ day_no }}" style="grid-column: {{ forloop.counter|add:"1" }};">
+        {% for item in day_items %}
+        <div class="wk-slot wk-slot--{{ item.kind }}{% if item.conflict %} wk-slot--conflict{% endif %}"
+             style="--top: {{ item.row_offset }}; --span: {{ item.span }}; --left: {{ item.left_pct }}%; --width: {{ item.width_pct }}%;"
+             role="gridcell"
+             aria-label="{{ item.kind_label }}：{{ item.title }}，{{ day_label }}第{{ item.start_period }}至{{ item.end_period }}節{% if item.conflict %}，時間衝突{% endif %}">
+          {% if item.url %}
+          <a class="wk-slot-link" href="{{ item.url }}">
+            <span class="wk-slot-name">{{ item.title }}</span>
+            <span class="wk-slot-sub">{{ item.subtitle }}</span>
+            {% if item.meta %}<span class="wk-slot-meta">{{ item.meta }}</span>{% endif %}
+          </a>
+          {% else %}
+          <span class="wk-slot-link">
+            <span class="wk-slot-name">{{ item.title }}</span>
+            <span class="wk-slot-sub">{{ item.subtitle }}</span>
+            {% if item.meta %}<span class="wk-slot-meta">{{ item.meta }}</span>{% endif %}
+          </span>
+          {% endif %}
+          <span class="wk-slot-tag">{{ item.kind_label }}</span>
+          {% if item.conflict %}<span class="wk-slot-warn">衝突</span>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
 </div>
 <p class="scroll-hint">左右滑動看完整一週。</p>
+
+{% if snapshot %}
+<section class="mine">
+  <div class="mine-head">
+    <h2>班級官方課程</h2>
+    <span class="num">{{ official_courses_count }} 門</span>
+  </div>
+  <ul class="courses">
+    {% for row in official_course_rows %}
+    <li class="course-row course-row--official">
+      <div class="identity">
+        <span class="course-name">{{ row.name }}</span>
+        <p class="course-meta">
+          {% if row.code %}{{ row.code }} · {% endif %}
+          {{ row.teacher|default:"教師未定" }} ·
+          {{ row.classroom|default:"教室未定" }} ·
+          {{ row.weekday_label }} 第{{ row.start_period }}-{{ row.end_period }}節
+        </p>
+      </div>
+    </li>
+    {% empty %}
+    <li class="empty">這個班級在 {{ snapshot.term.code }} 學期沒有官方課程資料。</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
 
 <section class="mine">
   <div class="mine-head"><h2>已選課程</h2><span class="num">{{ mine|length }} 門</span></div>
@@ -43,7 +122,7 @@
     <li class="course-row">
       <div class="identity">
         <a class="course-name" href="{% url 'course_detail' s.course.pk %}">{{ s.course.name }}</a>
-        <p class="course-meta">{{ s.course.code }} · {{ s.course.teacher }} · {{ s.label_display }} · {{ s.time_display }} · {{ s.room|default:"教室未定" }} · {{ s.course.credits }} 學分</p>
+        <p class="course-meta">{{ s.course.code }} · {{ s.course.teacher }} · {{ s.label_display }} · {{ s.time_display }} · {{ s.room|default:"教室未定" }} · {{ s.course.credits }} 學分{% if s.official_entry %} · 官方課表：{{ s.official_entry.teacher_name|default:"教師未定" }} {{ s.official_entry.classroom|default:"教室未定" }}{% endif %}</p>
       </div>
       <div class="action">{% include "courses/_action.html" with section=s action=s.action next=request.path %}</div>
     </li>

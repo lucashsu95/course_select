@@ -1,0 +1,74 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label='courses' %}">{% translate 'Courses' %}</a>
+  &rsaquo; <a href="{{ changelist_url }}">{% translate 'Section class policies' %}</a>
+  &rsaquo; {% translate 'Bulk class assignment' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <p>
+    {% translate "Choose a term and a student class group, then tick the source sections to assign. New policies are created as DRAFT; publish them later with the existing publish action." %}
+  </p>
+
+  {% if bulk_form %}
+    <form method="post" id="bulk-assign-form">
+      {% csrf_token %}
+      <input type="hidden" name="term" value="{{ selected_term }}">
+      <input type="hidden" name="class_group" value="{{ selected_class_group }}">
+      <fieldset class="module aligned">
+        <h2>{% translate "Sections to assign" %}</h2>
+        {% if bulk_form.non_field_errors %}
+          <p class="errornote">{{ bulk_form.non_field_errors }}</p>
+        {% endif %}
+        {% for field in bulk_form %}
+          {% if field.name == "term" or field.name == "class_group" %}
+            {# 學期與學生班級已在上一段選定，這裡只帶 hidden 值回去。 #}
+          {% else %}
+            <div class="form-row">
+              {{ field.errors }}
+              <div>
+                {{ field.label_tag }}
+                {{ field }}
+                {% if field.help_text %}<p class="help">{{ field.help_text }}</p>{% endif %}
+              </div>
+            </div>
+          {% endif %}
+        {% endfor %}
+      </fieldset>
+      <div class="submit-row">
+        <input type="submit" value="{% translate 'Assign policies' %}" class="default">
+        <a href="{{ changelist_url }}" class="button cancel-link">{% translate 'Cancel' %}</a>
+      </div>
+    </form>
+  {% else %}
+    <form method="get" id="bulk-select-form">
+      <fieldset class="module aligned">
+        <h2>{% translate "Term and class group" %}</h2>
+        {% if select_form.non_field_errors %}
+          <p class="errornote">{{ select_form.non_field_errors }}</p>
+        {% endif %}
+        {% for field in select_form %}
+          <div class="form-row">
+            {{ field.errors }}
+            <div>
+              {{ field.label_tag }}
+              {{ field }}
+              {% if field.help_text %}<p class="help">{{ field.help_text }}</p>{% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </fieldset>
+      <div class="submit-row">
+        <input type="submit" value="{% translate 'Next' %}" class="default">
+        <a href="{{ changelist_url }}" class="button cancel-link">{% translate 'Cancel' %}</a>
+      </div>
+    </form>
+  {% endif %}
+</div>
+{% endblock %}

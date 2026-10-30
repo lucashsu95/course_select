@@ -79,9 +79,10 @@ class GoogleLoginSuccessTests(GoogleLoginTestCase):
         self.google_login("s1234567@ntub.edu.tw")
         self.assertEqual(get_user_model().objects.filter(email="s1234567@ntub.edu.tw").count(), 1)
 
-    def test_login_redirects_to_course_list(self):
+    def test_login_redirects_to_onboarding_for_new_student(self):
+        """Google 新學生第一次登入還沒做過學籍設定，先導到 /onboarding/。"""
         r = self.google_login("s1234567@ntub.edu.tw")
-        self.assertEqual(r["Location"], "/")
+        self.assertEqual(r["Location"], reverse("onboarding"))
 
     def test_student_account_cannot_use_password_login(self):
         self.google_login("s1234567@ntub.edu.tw")

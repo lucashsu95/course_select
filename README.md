@@ -10,8 +10,10 @@ Django 迷你選課系統（Google OAuth 登入，限 @ntub.edu.tw）：瀏覽�
 - **選課開放階段** — 學期可設開放／截止時間：未開放、加選中、已截止三種狀態，列表與詳情頁顯示狀態列；截止後加選被擋（按鈕置灰），已加選者仍可退選。
 - **等待名單** — 額滿班別加選時自動進入等待（顯示第幾位），有人退選就自動遞補（遞補前重查同課與衝堂，不合格者移出順延）、頁面橫幅通知，點「知道了」才消失；等待中可隨時取消。
 - **先修課程** — 課程可設 1–2 門先修；列表/詳情標「先修：CS201」，登入者標已修✓／未修，未修加選被擋。
+- **官方開課的班別修課政策** — 官方開課（`NtubOfferingSource`）必須由課程維護員在後台發布「班別修課政策」才對學生開放加選：政策綁定「開課班別 × 學生班級」，狀態要 `PUBLISHED` 且「可自行加選」才開放。沒有政策、還是草稿、或不開放自行加選，都不能加選；看得到開課，但會標出原因並停用按鈕。同一門課可以對不同班級有不同政策（例如 115-1「網站應用程式設計」對二甲是本班必修、對三乙是跨班專選），三乙政策發布後三乙學生就能加選同一個班別。政策撤回後已加選者仍可退選、已排隊者仍可取消等待。
+- **官方課表衝堂** — 學生的班級官方課表也是加選的時間基線：撞到**不同課號**的官方課程就擋（官方課表本來就有同一門課時不算衝堂，官方活動如共同空堂不阻擋）；候補遞補時用同一判準重新驗證。
 - **篩選** — 課程列表可依關鍵字、星期、時段（上午/中午/下午/晚上）疊加過濾。
-- **我的課表** — 週一至週五網格，節點標示班別與教室，附總學分（每門課只算一次）。
+- **我的課表** — 週一至週五網格，節點標示班別與教室，附總學分（每門課只算一次）。班級官方課表與本站加選合併顯示（同一門課只佔一個時段，兩邊資料都保留）。
 - **登入** — Google OAuth（`/login/` → `/accounts/google/login/`）：只有經 Google 驗證的 `@ntub.edu.tw` 信箱能登入，檢查在伺服器端（`courses/adapters.py`）。課程瀏覽免登入，加選才需要。Django Admin 維持原本的帳密登入（管理員／老師）。
 - **老師專區** — 後台把 Teacher 綁到登入帳號後，該帳號可看到「我的課程」與自己課程的選課名單（姓名、信箱、班別、加選時間）。
 
@@ -22,11 +24,33 @@ Django 迷你選課系統（Google OAuth 登入，限 @ntub.edu.tw）：瀏覽�
 ```bash
 uv sync                        # 建 .venv 並安裝依賴
 uv run manage.py migrate
-uv run manage.py seed          # 載入 10 門範例課程與班別，可重複執行
 uv run --env-file .env manage.py runserver
 ```
 
 開 <http://localhost:8000>。要進 `/admin/` 先跑一次 `uv run manage.py createsuperuser`。
+
+### 示範資料（選用）
+
+`seed` 指令會載入 CS101 等 10 門**示範用**假課程與示範學期，只在需要離線示範
+加選／候補流程時才需要跑：
+
+```bash
+uv run manage.py seed          # 載入示範課程與班別，可重複執行
+```
+
+正式的本機開發資料庫**不應該**跑這個指令：示範課程會出現在學生搜尋結果裡，
+示範學期也可能蓋掉真正的當前學期（`seed` 現在不會搶走已存在的當前學期，但仍
+會留下假課程）。
+
+已經跑過、想清掉示範資料時：
+
+```bash
+uv run manage.py cleanup_demo_data            # dry-run：只列出會刪什麼，不寫入
+uv run manage.py cleanup_demo_data --apply    # 真的刪除
+```
+
+這個指令只刪 `seed.py` 建立的資料（以課號＋課名＋老師＋學期多重比對確認），
+不會碰真實的 NTUB 課程、官方課表、學籍目錄、Google 登入帳號或管理員權限。
 
 ## 登入（Google OAuth）
 
@@ -70,9 +94,12 @@ Google 登入另有 `courses/tests/test_auth.py`：登入成功、非 NTUB 信�
 
 ```
 config/     settings、根路由（/admin/、/accounts/、/login/、/logout/、courses）
-courses/    models（Term / Teacher / Course / Section / Enrollment）、services、views、urls、templates、static
+courses/    models（Term / Teacher / Course / Section / Enrollment / SectionClassPolicy）、services、views、urls、templates、static
 courses/adapters.py        Google 登入的伺服器端把關（NTUB 網域 + 信箱已驗證）
-courses/management/commands/seed.py    範例學期、課程與班別資料
+courses/enrollment_policy.py   班別修課政策與官方課表衝堂判準（加選、候補、頁面共用）
+courses/standing.py        學生在本學期的已選／等待／學分／班級／政策／官方課表
+courses/management/commands/seed.py    範例學期、課程與班別資料（選用，僅供離線示範）
+courses/management/commands/cleanup_demo_data.py    清除 seed 建立的示範資料（預設 dry-run）
 ```
 
 ## 可調設定
@@ -91,6 +118,7 @@ courses/management/commands/seed.py    範例學期、課程與班別資料
 ## 已知限制
 
 - 名額檢查在 SQLite 上取不到列鎖，高併發下可能超收；換 PostgreSQL 後 `select_for_update()` 才會真正生效（`courses/services.py`）。
+- 名額是**本站模擬選課數**（畫面標示「本站模擬」），不是學校即時選課人數；本站是模擬選課系統，非 NTUB 正式校務選課紀錄。官方公告的已選人數只留在官方來源紀錄裡，不混進本站名額。
 - 資料庫為 SQLite，定位是本地開發與 demo。
 - 老師只看得到當前學期的課與名單，歷年紀錄目前沒有入口。
 - 老師對自己的課仍看得到「加選」按鈕，系統沒擋老師加選自己的課。

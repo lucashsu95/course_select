@@ -29,4 +29,8 @@
   <button class="btn btn-secondary" disabled>超學分</button>
 {% elif action == "blocked_same_course" %}
   <button class="btn btn-secondary" disabled>已選此課</button>
+{% elif action == "blocked_required" %}
+  <button class="btn btn-secondary" disabled>本班必修</button>
+{% elif action == "blocked_policy" %}
+  <button class="btn btn-secondary" disabled>未開放加選</button>
 {% endif %}

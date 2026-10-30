@@ -6,6 +6,7 @@
       <a class="course-name" href="{% url 'course_detail' s.course.pk %}">{{ s.course.name }}</a>
       <p class="course-meta">{{ s.course.teacher }}</p>
     {% endif %}
+    {% if s.policy_reason %}<p class="policy-flag">未開放加選：{{ s.policy_reason }}</p>{% endif %}
   </div>
   <div class="meta">
     {% if in_course_detail %}
@@ -20,6 +21,7 @@
   </div>
   <div class="seats">
     <span class="seats-num num">{{ s.enrolled }}<span class="of"> / {{ s.capacity }}</span></span>
+    <span class="seats-tag">本站模擬</span>
     {% if s.is_full %}<span class="full-flag">額滿</span>{% endif %}
     {% if s.waitlist_count %}<span class="wait-flag">{{ s.waitlist_count }} 人等待</span>{% endif %}
     <span class="track" aria-hidden="true"><span style="width:{% widthratio s.enrolled s.capacity 100 %}%"></span></span>

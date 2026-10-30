@@ -1,0 +1,131 @@
+{% extends "courses/base.html" %}
+{% block title %}學籍設定{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>完成學籍設定</h1>
+    <p class="sub">第一次使用請先選擇學制、系所、年級與班級，之後就能開始選課。</p>
+  </div>
+</div>
+
+<section class="panel setup-panel">
+  <div class="setup-identity">
+    <span class="who-name">{{ google_name }}</span>
+    <span class="who-meta">{{ google_email }}</span>
+  </div>
+
+  <form method="post" class="setup-form" id="setup-form" novalidate>
+    {% csrf_token %}
+    {% if request.POST.next or request.GET.next %}
+      <input type="hidden" name="next" value="{{ request.POST.next|default:request.GET.next }}">
+    {% endif %}
+
+    <div class="setup-row">
+      <div class="setup-field">
+        <label for="id_program_type">學制</label>
+        <select name="program_type" id="id_program_type" required>
+          <option value="">請選擇學制</option>
+          {% for pt in cascade.program_types %}
+            <option value="{{ pt.pk }}"{% if selected.program_type == pt.pk|stringformat:'s' %} selected{% endif %}>{{ pt.name_zh }}（{{ pt.code }}）</option>
+          {% endfor %}
+        </select>
+        {% for e in form.program_type.errors %}<p class="field-error">{{ e }}</p>{% endfor %}
+      </div>
+
+      <div class="setup-field">
+        <label for="id_department">系所</label>
+        <select name="department" id="id_department" required>
+          <option value="">請選擇系所</option>
+          {% for d in cascade.departments %}
+            <option value="{{ d.pk }}" data-program-type="{{ d.program_type_id }}"{% if selected.department == d.pk|stringformat:'s' %} selected{% endif %}>{{ d.name_zh }}（{{ d.code }}）</option>
+          {% endfor %}
+        </select>
+        {% for e in form.department.errors %}<p class="field-error">{{ e }}</p>{% endfor %}
+      </div>
+    </div>
+
+    <div class="setup-row">
+      <div class="setup-field">
+        <label for="id_grade">年級</label>
+        <select name="grade" id="id_grade" required>
+          <option value="">請選擇年級</option>
+          {% for g in cascade.grades %}
+            <option value="{{ g.value }}" data-departments="{{ g.department_ids|join:',' }}"{% if selected.grade == g.value|stringformat:'s' %} selected{% endif %}>{{ g.label }}</option>
+          {% endfor %}
+        </select>
+        {% for e in form.grade.errors %}<p class="field-error">{{ e }}</p>{% endfor %}
+      </div>
+
+      <div class="setup-field">
+        <label for="id_class_group">班級</label>
+        <select name="class_group" id="id_class_group" required>
+          <option value="">請選擇班級</option>
+          {% for c in cascade.class_groups %}
+            <option value="{{ c.pk }}" data-department="{{ c.department_id }}" data-grade="{{ c.grade_no|default_if_none:'' }}"{% if selected.class_group == c.pk|stringformat:'s' %} selected{% endif %}>{{ c.name_zh }}（{{ c.code }}）</option>
+          {% endfor %}
+        </select>
+        {% for e in form.class_group.errors %}<p class="field-error">{{ e }}</p>{% endfor %}
+      </div>
+    </div>
+
+    <button class="btn btn-primary" type="submit">完成設定</button>
+  </form>
+</section>
+
+<script>
+// 四階級聯：學制 → 系所 → 年級 → 班級。
+// 只是讓選單好選；送到伺服器的值仍會在伺服器端重新驗證。
+(function () {
+  var pt = document.getElementById("id_program_type");
+  var dept = document.getElementById("id_department");
+  var grade = document.getElementById("id_grade");
+  var group = document.getElementById("id_class_group");
+  if (!pt || !dept || !grade || !group) return;
+
+  function hide(select, keep) {
+    Array.prototype.forEach.call(select.options, function (opt) {
+      if (!opt.value) return;
+      opt.hidden = keep.indexOf(opt.value) === -1;
+    });
+  }
+
+  function refreshDepartments() {
+    var keep = [];
+    Array.prototype.forEach.call(dept.options, function (opt) {
+      if (opt.value && opt.dataset.programType === pt.value) keep.push(opt.value);
+    });
+    hide(dept, keep);
+    if (keep.indexOf(dept.value) === -1) dept.value = "";
+    refreshGrades();
+  }
+
+  function refreshGrades() {
+    var keep = [];
+    Array.prototype.forEach.call(grade.options, function (opt) {
+      if (!opt.value) return;
+      var ids = (opt.dataset.departments || "").split(",");
+      if (dept.value && ids.indexOf(dept.value) !== -1) keep.push(opt.value);
+    });
+    hide(grade, keep);
+    if (keep.indexOf(grade.value) === -1) grade.value = "";
+    refreshGroups();
+  }
+
+  function refreshGroups() {
+    var keep = [];
+    Array.prototype.forEach.call(group.options, function (opt) {
+      if (!opt.value) return;
+      if (opt.dataset.department === dept.value && opt.dataset.grade === grade.value) keep.push(opt.value);
+    });
+    hide(group, keep);
+    if (keep.indexOf(group.value) === -1) group.value = "";
+  }
+
+  pt.addEventListener("change", refreshDepartments);
+  dept.addEventListener("change", refreshGrades);
+  grade.addEventListener("change", refreshGroups);
+
+  refreshDepartments();
+})();
+</script>
+{% endblock %}
