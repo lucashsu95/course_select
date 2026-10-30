@@ -1,4 +1,4 @@
-<li class="course-row{% if in_course_detail %} course-row--detail{% else %} course-row--list{% endif %}">
+<li{% if in_course_detail %} id="section-{{ s.pk }}"{% endif %} class="course-row{% if in_course_detail %} course-row--detail{% else %} course-row--list{% endif %}">
   <div class="identity">
     {% if in_course_detail %}
       <span class="course-name">{{ s.label_display }}</span>
@@ -30,5 +30,6 @@
   </div>
   <div class="action">
     {% if user.is_authenticated %}{% include "courses/_action.html" with section=s action=s.action next=next wait_position=s.wait_position %}{% endif %}
+    {% if in_course_detail %}<button class="btn btn-ghost detail-row-preview" type="button" data-preview-section data-section-name="{{ s.course.name }} {{ s.label_display }}" data-day="{{ s.day }}" data-start-period="{{ s.start_period }}" data-end-period="{{ s.end_period }}" data-room="{{ s.room|default:'教室未定' }}" data-action="{{ s.action }}" data-time="{{ s.time_display }}">預覽加入課表</button>{% endif %}
   </div>
 </li>
