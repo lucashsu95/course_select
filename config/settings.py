@@ -7,6 +7,12 @@ DEBUG = os.environ.get("DEBUG", "1") == "1"
 ALLOWED_HOSTS = ["*"] if DEBUG else os.environ.get("ALLOWED_HOSTS", "").split(",")
 
 INSTALLED_APPS = [
+    # django_components 必須在前面：AdminLTE 4 的元件（component）依賴它。
+    "django_components",
+    # django_adminlte4 必須排在 django.contrib.admin 前面，套件自帶的 admin/*
+    # 模板覆寫才會贏（後台變成 AdminLTE 4 外框）；同理排在 allauth 前面，
+    # 套件的 allauth/* 模板會蓋掉 allauth 自己的版本，Google 登入頁走 AdminLTE 樣式。
+    "django_adminlte4",
     "django.contrib.admin", "django.contrib.auth", "django.contrib.contenttypes",
     "django.contrib.sessions", "django.contrib.messages", "django.contrib.staticfiles",
     "django.contrib.sites",
@@ -29,14 +35,45 @@ MIDDLEWARE = [
 ROOT_URLCONF = "config.urls"
 TEMPLATES = [{
     "BACKEND": "django.template.backends.django.DjangoTemplates",
-    "DIRS": [], "APP_DIRS": True,
-    "OPTIONS": {"context_processors": [
-        "django.template.context_processors.request",
-        "django.contrib.auth.context_processors.auth",
-        "django.contrib.messages.context_processors.messages",
-        "courses.context_processors.waitlist_banner",
-    ]},
+    # 專案層級的模板覆寫（優先於套件/app 內的同名模板）。
+    # 目前放 templates/admin/base.html：修正 AdminLTE 把 object-tools 塞在
+    # {% block content %} 內，導致 Django 的 change_list / change_form 覆寫
+    # content 後「新增」按鈕消失的問題。
+    "DIRS": [BASE_DIR / "templates"],
+    # django-components 要求明確列出 loaders，所以 APP_DIRS 必須是 False。
+    # app_directories.Loader 仍在清單裡，app 內的模板照樣找得到。
+    "APP_DIRS": False,
+    "OPTIONS": {
+        "context_processors": [
+            "django.template.context_processors.request",
+            "django.contrib.auth.context_processors.auth",
+            "django.contrib.messages.context_processors.messages",
+            "django_adminlte4.context_processors.adminlte",
+            "courses.context_processors.waitlist_banner",
+        ],
+        "loaders": [(
+            "django.template.loaders.cached.Loader",
+            [
+                "django.template.loaders.filesystem.Loader",
+                "django.template.loaders.app_directories.Loader",
+                "django_components.template_loader.Loader",
+            ],
+        )],
+        # 讓模板可以直接用 {% component %} 而不用 {% load component_tags %}。
+        "builtins": ["django_components.templatetags.component_tags"],
+    },
 }]
+# AdminLTE 4 的元件（component）住在套件的 components/ 目錄，開啟自動探索即可。
+COMPONENTS = {"dirs": [], "app_dirs": ["components"], "autodiscover": True}
+# 元件目錄裡的 .css/.js 也要能 collectstatic，否則 {% component_css_dependencies %}
+# 產生的 <link> 會 404。
+STATICFILES_FINDERS = [
+    "django.contrib.staticfiles.finders.FileSystemFinder",
+    "django.contrib.staticfiles.finders.AppDirectoriesFinder",
+    "django_components.finders.ComponentsFileSystemFinder",
+]
+# 專案層級的靜態檔（static/css/admin.css 等）也要能被 collectstatic 收進 STATIC_ROOT。
+STATICFILES_DIRS = [BASE_DIR / "static"]
 DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3"}}
 LANGUAGE_CODE = "zh-hant"
 TIME_ZONE = "Asia/Taipei"
@@ -73,6 +110,27 @@ SOCIALACCOUNT_PROVIDERS = {"google": {
 }}
 
 MAX_CREDITS = 25  # 學分上限
+
+# --- AdminLTE 4（後台外框）---
+# 這個專案沒有前端建置流程（沒有 npm/vite），所以用套件內附的預編譯 bundle，
+# 不需要 Node 就能 collectstatic 並使用。
+ADMINLTE = {
+    "assets_mode": "static",
+    "title": "選課系統",
+    "logo": "<b>選課</b>系統",
+    "logo_alt_text": "選課系統",
+    "admin_brand": "選課系統後台",
+    "sidebar_theme": "dark",
+    "menu": [
+        {"header": "選課"},
+        {"text": "搜尋課程", "url": "/", "icon": "bi bi-search"},
+        {"text": "我的課表", "url": "/my/", "icon": "bi bi-calendar-week"},
+        {"text": "個人資料", "url": "/me/profile/", "icon": "bi bi-person"},
+        {"text": "授課管理", "url": "/teaching/", "icon": "bi bi-person-workspace"},
+        {"header": "管理"},
+        {"text": "管理後台", "url": "/admin/", "icon": "bi bi-sliders"},
+    ],
+}
 
 # --- ngrok demo：只在 USE_NGROK=1 時生效 ---
 # 不寫死 *.ngrok-free.app，那是公共命名空間，別人的頁面也會被當成可信任 origin；
