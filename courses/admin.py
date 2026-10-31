@@ -517,29 +517,34 @@ class SectionClassPolicyAdmin(admin.ModelAdmin):
 
     @admin.display(description="可否自行加選", ordering="can_enroll")
     def can_enroll_display(self, obj):
-        """可否自行加選：用顏色區分「可加選」與「不可加選」。
-
-        不可加選通常是本班必修（班級已有固定課表），這是維護員最常看錯的
-        一欄，所以用醒目的灰色標示。
-        """
+        """以顏色區分是否可自行加選。"""
         if obj.can_enroll:
             return format_html(
-                '<span style="color:#1a7f37;font-weight:600;">可自行加選</span>')
+                '<span style="color:#1a7f37;font-weight:600;">{}</span>',
+                "可自行加選",
+            )
         return format_html(
-            '<span style="color:#6c757d;font-weight:600;">不可自行加選</span>')
+            '<span style="color:#6c757d;font-weight:600;">{}</span>',
+            "不可自行加選",
+        )
 
     @admin.display(description="發布狀態", ordering="status")
     def status_display(self, obj):
-        """發布狀態：已發布（綠）／草稿（灰）一目了然。"""
+        """以標籤區分已發布與草稿。"""
         if obj.status == SectionClassPolicy.Status.PUBLISHED:
             return format_html(
                 '<span style="color:#1a7f37;font-weight:700;'
                 'background:#e3f3e6;padding:1px 8px;border-radius:10px;">'
-                '已發布</span>')
+                '{}</span>',
+                "已發布",
+            )
         return format_html(
             '<span style="color:#6c757d;font-weight:600;'
-            'background:#f1f1f1;padding:1px 8px;border-radius:10px;">草稿</span>')
-
+            'background:#f1f1f1;padding:1px 8px;border-radius:10px;">'
+            '{}</span>',
+            "草稿",
+        )
+        
     @admin.display(description="確認人", ordering="confirmed_by__username")
     def confirmed_by_display(self, obj):
         """誰確認了這筆政策（沒確認過就是「—」）。"""
