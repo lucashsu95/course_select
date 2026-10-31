@@ -642,6 +642,12 @@ class SectionClassPolicyAdmin(admin.ModelAdmin):
         context["bulk_form"] = bulk_form
         context["selected_term"] = selected_term
         context["selected_class_group"] = selected_class_group
+        context["selected_class_group_obj"] = (
+            scoped_class_groups(user).select_related(
+                "department", "department__program_type"
+            ).filter(pk=selected_class_group).first()
+            if selected_class_group else None
+        )
         return TemplateResponse(request, "admin/courses/bulk_class_assignment.html", context)
 
     def _create_bulk_policies(self, form):

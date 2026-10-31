@@ -14,7 +14,8 @@
 from django import forms
 
 from .maintainer import scoped_class_groups, scoped_sections
-from .models import AcademicClassGroup, Section, SectionClassPolicy, Term
+from .models import (AcademicClassGroup, AcademicDepartment, AcademicProgramType,
+                     Section, SectionClassPolicy, Term)
 
 
 def available_class_groups(user):
@@ -43,7 +44,7 @@ def _section_label(section):
 
 
 class BulkClassAssignmentSelectForm(forms.Form):
-    """第一步：選學期與學生班級。
+    """第一步：依學期與四階級聯選擇學生班級。
 
     下拉選單只給授權系所的班級：別系的班級連選都選不到；就算有人改 POST
     送出別的班級 id，欄位驗證也會直接擋下（queryset 裡沒有這個選項）。
@@ -51,6 +52,14 @@ class BulkClassAssignmentSelectForm(forms.Form):
 
     term = forms.ModelChoiceField(queryset=Term.objects.all(), label="學期",
                                   empty_label="— 請選擇學期 —")
+    program_type = forms.ModelChoiceField(queryset=AcademicProgramType.objects.none(),
+                                           label="學制", required=False,
+                                           empty_label="— 請選擇學制 —")
+    department = forms.ModelChoiceField(queryset=AcademicDepartment.objects.none(),
+                                         label="系所", required=False,
+                                         empty_label="— 請選擇系所 —")
+    grade = forms.ChoiceField(label="年級", required=False,
+                              choices=[("", "— 請選擇年級 —")])
     class_group = forms.ModelChoiceField(queryset=AcademicClassGroup.objects.none(),
                                           label="學生班級",
                                           empty_label="— 請選擇學生班級 —")
@@ -58,8 +67,30 @@ class BulkClassAssignmentSelectForm(forms.Form):
     def __init__(self, *args, user, **kwargs):
         super().__init__(*args, **kwargs)
         self.user = user
-        # 下拉選單只給授權系所的班級：別系的班級連選都選不到。
-        self.fields["class_group"].queryset = available_class_groups(user)
+        groups = available_class_groups(user).select_related(
+            "department", "department__program_type")
+        departments = AcademicDepartment.objects.filter(
+            pk__in=groups.values("department_id")).select_related("program_type")
+        program_types = AcademicProgramType.objects.filter(
+            pk__in=departments.values("program_type_id"))
+        self.fields["program_type"].queryset = program_types
+        self.fields["department"].queryset = departments
+        self.fields["class_group"].queryset = groups
+        self.fields["grade"].choices = [("", "— 請選擇年級 —")] + [
+            (str(grade), f"{grade} 年級")
+            for grade in sorted(set(groups.exclude(grade_no__isnull=True)
+                                     .values_list("grade_no", flat=True)))
+        ]
+
+        if self.is_bound:
+            program_type_id = self.data.get("program_type")
+            department_id = self.data.get("department")
+            if program_type_id:
+                self.fields["department"].queryset = departments.filter(
+                    program_type_id=program_type_id)
+            if department_id:
+                self.fields["class_group"].queryset = groups.filter(
+                    department_id=department_id)
 
     def clean_class_group(self):
         """學生班級必須落在授權系所底下（偽造 id 會在這裡被擋）。"""
@@ -67,6 +98,29 @@ class BulkClassAssignmentSelectForm(forms.Form):
         if not available_class_groups(self.user).filter(pk=class_group.pk).exists():
             raise forms.ValidationError("你只能替授權系所的學生班級安排課程。")
         return class_group
+
+    def clean(self):
+        cleaned = super().clean()
+        group = cleaned.get("class_group")
+        program_type = cleaned.get("program_type")
+        department = cleaned.get("department")
+        grade = cleaned.get("grade")
+        # 舊連結只帶 term + class_group，允許略過前端級聯欄位。
+        if group is None:
+            return cleaned
+        if department is not None and group.department_id != department.pk:
+            self.add_error("class_group", "所選班級不屬於這個系所。")
+        if program_type is not None and group.department.program_type_id != program_type.pk:
+            self.add_error("class_group", "所選班級不屬於這個學制。")
+        if grade:
+            try:
+                grade_no = int(grade)
+            except (TypeError, ValueError):
+                self.add_error("grade", "請選擇有效年級。")
+            else:
+                if group.grade_no != grade_no:
+                    self.add_error("grade", "年級與班級不一致。")
+        return cleaned
 
 
 class BulkClassAssignmentForm(forms.Form):
@@ -85,8 +139,13 @@ class BulkClassAssignmentForm(forms.Form):
     sections = forms.ModelMultipleChoiceField(
         queryset=Section.objects.none(), widget=forms.CheckboxSelectMultiple,
         label="來源開課班別")
-    course_category = forms.ChoiceField(choices=SectionClassPolicy.CourseCategory.choices,
-                                         label="修課分類")
+    course_category = forms.ChoiceField(
+        choices=(
+            (SectionClassPolicy.CourseCategory.DEPARTMENT_ELECTIVE, "專業選修"),
+            (SectionClassPolicy.CourseCategory.PROFESSIONAL_ELECTIVE, "跨班專業選修"),
+            (SectionClassPolicy.CourseCategory.GENERAL_ELECTIVE, "通識選修"),
+        ),
+        label="修課分類")
     can_enroll = forms.BooleanField(label="可自行加選", required=False, initial=True,
                                      help_text="發布後學生才可以自行加選這門課。")
 

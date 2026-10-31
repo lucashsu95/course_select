@@ -440,6 +440,7 @@ class SectionClassPolicy(models.Model):
         """修課分類：同一個開課班別對不同班級可以不同。"""
 
         REQUIRED = "REQUIRED", "本班必修"
+        DEPARTMENT_ELECTIVE = "DEPARTMENT_ELECTIVE", "專業選修"
         PROFESSIONAL_ELECTIVE = "PROFESSIONAL_ELECTIVE", "跨班專業選修"
         GENERAL_ELECTIVE = "GENERAL_ELECTIVE", "通識選修"
         OTHER = "OTHER", "其他"

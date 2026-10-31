@@ -130,6 +130,26 @@ class BulkAssignmentFlowTests(BulkAssignmentTestBase):
             self.assertIn(section.course.code, content)
         self.assertIn("PROFESSIONAL_ELECTIVE", content)
 
+    def test_select_step_cascade_only_exposes_authorized_classes(self):
+        r = self.client.get(reverse(BULK_URL))
+        self.assertEqual(r.status_code, 200)
+        content = r.content.decode()
+        self.assertIn("學制", content)
+        self.assertIn("系所", content)
+        self.assertIn("年級", content)
+        self.assertIn("資管三年乙班（40630B）", content)
+        self.assertNotIn("他系二年甲班（50020A）", content)
+
+    def test_bulk_category_choices_are_electives_only(self):
+        r = self.client.get(reverse(BULK_URL),
+                            {"term": self.term.pk, "class_group": self.class_30b.pk})
+        content = r.content.decode()
+        self.assertIn("DEPARTMENT_ELECTIVE", content)
+        self.assertIn("PROFESSIONAL_ELECTIVE", content)
+        self.assertIn("GENERAL_ELECTIVE", content)
+        self.assertNotIn("本班必修", content)
+        self.assertNotIn("其他", content)
+
     def test_bulk_create_three_policies_for_one_class_group(self):
         r = self.post_bulk(self.sections)
         self.assertEqual(r.status_code, 302)
@@ -145,6 +165,23 @@ class BulkAssignmentFlowTests(BulkAssignmentTestBase):
             # 批次安排不等於發布：確認者與確認時間必須是空的。
             self.assertIsNone(policy.confirmed_by_id)
             self.assertIsNone(policy.confirmed_at)
+
+    def test_each_elective_category_creates_draft_policy(self):
+        categories = (
+            "DEPARTMENT_ELECTIVE",
+            "PROFESSIONAL_ELECTIVE",
+            "GENERAL_ELECTIVE",
+        )
+        for section, category in zip(self.sections, categories):
+            r = self.post_bulk([section], category=category)
+            self.assertEqual(r.status_code, 302)
+        self.assertEqual(
+            set(SectionClassPolicy.objects.values_list("course_category", flat=True)),
+            set(categories),
+        )
+        self.assertEqual(
+            SectionClassPolicy.objects.filter(
+                status=SectionClassPolicy.Status.DRAFT).count(), 3)
 
     def test_bulk_create_reports_counts(self):
         r = self.post_bulk(self.sections, follow=True)
@@ -276,6 +313,13 @@ class BulkAssignmentForgedInputTests(BulkAssignmentTestBase):
         self.assertFalse(SectionClassPolicy.objects.filter(
             class_group=self.class_other).exists())
         self.assertEqual(SectionClassPolicy.objects.count(), 0)
+
+    def test_forbidden_categories_create_nothing(self):
+        for category in ("REQUIRED", "OTHER", "UNKNOWN"):
+            with self.subTest(category=category):
+                r = self.post_bulk(self.sections, category=category)
+                self.assertNotEqual(r.status_code, 302)
+                self.assertEqual(SectionClassPolicy.objects.count(), 0)
 
 
 class BulkAssignmentDoesNotTouchSourceTests(BulkAssignmentTestBase):
