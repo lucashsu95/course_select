@@ -1,0 +1,34 @@
+/*!
+ * 專案層級的後台樣式覆寫（配合 templates/admin/base.html 的 AdminLTE 分支）。
+ *
+ * 為什麼需要這個檔案：
+ * Django 6.1 把標題與 object-tools（新增／歷史等按鈕）放進 .titles-and-tools，
+ * h1/h2 因此不再是 #content 的直接子元素，套件內 adminlte-admin.css 裡的
+ * 「#content > h1 / #content > h2」選擇器就不會再命中，標題會退回 Django
+ * base.css 的 1.25rem/1rem，與 AdminLTE 的視覺比例不一致。這裡補回同樣的尺寸。
+ * 其餘版面（.titles-and-tools 的 flex 排列、object-tools 的膠囊造型）
+ * 直接沿用 Django base.css / responsive.css 的原生樣式。
+ */
+
+/* 標題：維持 AdminLTE 的字級比例（對應套件原本的 #content > h1 / #content > h2）。 */
+.adminlte-admin .app-content #content .titles-and-tools .titles h1 {
+  font-size: 1.5rem;
+  margin: 0 0 0.25rem;
+}
+
+.adminlte-admin .app-content #content .titles-and-tools .titles h2 {
+  font-size: 1.2rem;
+  margin: 0 0 0.5rem;
+}
+
+/* 副標題（content_subtitle）為空時不留空白。 */
+.adminlte-admin .app-content #content .titles-and-tools .titles h2:empty {
+  display: none;
+}
+
+/* object-tools：靠右排列的按鈕列。寬螢幕時與標題第一行對齊，
+   窄螢幕由 Django responsive.css 改成直向堆疊。 */
+.adminlte-admin .app-content #content .titles-and-tools .object-tools {
+  align-self: flex-start;
+  margin: 0;
+}
