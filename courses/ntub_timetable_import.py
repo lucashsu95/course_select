@@ -91,9 +91,10 @@ class _PreparedEntry:
 
     @property
     def identity(self) -> tuple:
-        """同一位時段的識別碼：重複匯入時用它對上既有資料。"""
+        """以官方課程識別碼對上資料，時段變更時更新同一筆課程。"""
         if self.entry_type == ENTRY_COURSE:
             key = f"course-{self.course_code}-{self.official_serial}"
+            return (self.entry_type, key)
         else:
             key = f"activity-{self.course_name}"
         return (self.weekday, self.start_period, self.end_period, self.entry_type, key)
@@ -391,9 +392,10 @@ def _resolve_class_group(class_code: str, class_name: str) -> AcademicClassGroup
 
 
 def _entry_identity(entry: NtubTimetableEntry) -> tuple:
-    """已存在於資料庫的明細，其位時識別碼（與 :attr:`_PreparedEntry.identity` 一致）。"""
+    """已存在明細的識別碼（與 :attr:`_PreparedEntry.identity` 一致）。"""
     if entry.entry_type == ENTRY_COURSE:
         key = f"course-{entry.course_code}-{entry.official_serial}"
+        return (entry.entry_type, key)
     else:
         key = f"activity-{entry.course_name}"
     return (entry.weekday, entry.start_period, entry.end_period, entry.entry_type, key)

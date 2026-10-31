@@ -1,3 +1,5 @@
+import json
+
 from django import forms
 from django.contrib import admin, messages
 from django.contrib.auth.models import Group, User
@@ -20,15 +22,27 @@ from .maintainer import (can_manage_policy, can_manage_section, grant_maintainer
                           scoped_sections)
 from .maintainer_assignment_forms import (BulkClassAssignmentForm,
                                           BulkClassAssignmentSelectForm)
+from .ntub_official import (OfficialFetchError, OfficialFetchClient,
+                            parse_timetable_html, sync_offering_syllabi,
+                            sync_syllabus, sync_timetable_syllabi)
+from .ntub_timetable_import import import_payload
 from .models import (AcademicCatalog, AcademicClassGroup, AcademicDepartment,
                      AcademicProgramType, Course, CourseMaintainerScope, Enrollment,
                      NtubCurriculumRecommendation, NtubOfferingAmbiguity,
                      NtubOfferingSource, NtubRecommendationCandidate,
-                     NtubTimetableEntry, NtubTimetableSnapshot, Section,
+                     NtubTimetableEntry, NtubTimetableSnapshot, OfficialCourseCredit,
+                     OfficialTeachingSyllabus, Section,
                      SectionClassPolicy, StudentAcademicProfile, Teacher, Term, Waitlist)
 
 
 class CourseAdminForm(forms.ModelForm):
+    def __init__(self, *args, request=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.instance.pk:
+            self.fields["owning_department"].required = True
+        if request is not None and not is_superuser(request.user):
+            self.fields["owning_department"].queryset = scoped_departments(request.user)
+
     class Meta:
         model = Course
         fields = "__all__"
@@ -39,6 +53,17 @@ class CourseAdminForm(forms.ModelForm):
         if qs.count() > 2:
             raise forms.ValidationError("先修課程最多設 2 門。")
         return qs
+
+
+class SectionAdminForm(forms.ModelForm):
+    def __init__(self, *args, request=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if request is not None and not is_superuser(request.user):
+            self.fields["course"].queryset = scoped_courses(request.user)
+
+    class Meta:
+        model = Section
+        fields = "__all__"
 
 
 class MaintainerScopedAdmin(admin.ModelAdmin):
@@ -98,22 +123,41 @@ class TeacherAdmin(admin.ModelAdmin):
 @admin.register(Course)
 class CourseAdmin(MaintainerScopedAdmin):
     form = CourseAdminForm
-    list_display = ["code", "name", "term", "teacher", "credits"]
+    list_display = ["code", "name", "owning_department", "term", "teacher", "credits"]
     list_filter = ["term", "teacher"]
     search_fields = ["code", "name"]
 
     def scope_queryset(self, request, queryset):
         return queryset.filter(pk__in=scoped_courses(request.user).values("pk"))
 
+    def get_form(self, request, obj=None, **kwargs):
+        form_class = super().get_form(request, obj, **kwargs)
+
+        class RequestCourseForm(form_class):
+            def __init__(self, *args, **form_kwargs):
+                super().__init__(*args, request=request, **form_kwargs)
+
+        return RequestCourseForm
+
 
 @admin.register(Section)
 class SectionAdmin(MaintainerScopedAdmin):
+    form = SectionAdminForm
     list_display = ["label", "course", "day", "start_period", "end_period", "room", "capacity"]
     list_filter = ["course__term", "day"]
     search_fields = ["course__code", "course__name"]
 
     def scope_queryset(self, request, queryset):
         return queryset.filter(pk__in=scoped_sections(request.user).values("pk"))
+
+    def get_form(self, request, obj=None, **kwargs):
+        form_class = super().get_form(request, obj, **kwargs)
+
+        class RequestSectionForm(form_class):
+            def __init__(self, *args, **form_kwargs):
+                super().__init__(*args, request=request, **form_kwargs)
+
+        return RequestSectionForm
 
 
 @admin.register(Enrollment)
@@ -223,6 +267,87 @@ class NtubTimetableSnapshotAdmin(ScopedReadOnlyAdmin):
     search_fields = ["class_group__code", "class_group__name_zh", "class_name"]
     list_select_related = ["class_group", "term"]
     date_hierarchy = "retrieved_at"
+    change_list_template = "admin/courses/ntubtimetablesnapshot/change_list.html"
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path("sync-official/", self.admin_site.admin_view(self.sync_official),
+                 name="courses_ntubtimetablesnapshot_sync_official"),
+        ]
+        return custom + urls
+
+    def sync_official(self, request):
+        form = OfficialTimetableSyncForm(
+            request.POST or None, user=request.user)
+        preview = None
+        syllabus_records = []
+        error = None
+        if request.method == "POST" and form.is_valid():
+            action = request.POST.get("action")
+            identifiers = form.identifiers()
+            try:
+                if action == "preview":
+                    html = OfficialFetchClient().fetch_timetable(identifiers)
+                    preview = parse_timetable_html(
+                        html, identifiers["academic_year"], identifiers["semester"],
+                        identifiers["class_code"], identifiers["class_name"])
+                    request.session["ntub_sync_preview"] = preview
+                elif action == "syllabus":
+                    records = sync_timetable_syllabi(
+                        form.cleaned_data["class_group"],
+                        Term.objects.get(code=(
+                            f"{identifiers['academic_year']}-{identifiers['semester']}")),
+                    )
+                    syllabus_records = records
+                    success_count = sum(r.status == "success" for r in records)
+                    self.message_user(
+                        request,
+                        f"教學大綱同步完成：成功 {success_count} 筆，"
+                        f"其餘 {len(records) - success_count} 筆保留狀態。",
+                        messages.SUCCESS if success_count == len(records)
+                        else messages.WARNING,
+                    )
+                elif action == "import":
+                    preview = request.session.pop("ntub_sync_preview", None)
+                    if not preview:
+                        raise OfficialFetchError("請先預覽官方查詢結果，再確認匯入。")
+                    summary = import_payload(preview)
+                    self.message_user(
+                        request,
+                        f"匯入完成：新增 {summary.entries_created} 筆、"
+                        f"更新 {summary.entries_updated} 筆課表明細。",
+                        messages.SUCCESS,
+                    )
+                    return HttpResponseRedirect(
+                        reverse("admin:courses_ntubtimetablesnapshot_changelist"))
+            except OfficialFetchError as exc:
+                error = str(exc)
+            except Exception as exc:
+                error = f"匯入失敗，未寫入資料：{exc}"
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "同步官方課表與教學大綱",
+            "form": form,
+            "preview": preview,
+            "syllabus_records": syllabus_records,
+            "error": error,
+            "opts": self.model._meta,
+            "class_options": [
+                {
+                    "value": group.pk,
+                    "label": f"{group.name_zh}（{group.code}）",
+                    "program_type_id": group.department.program_type_id,
+                    "program_type_label": str(group.department.program_type),
+                    "department_id": group.department_id,
+                    "department_label": str(group.department),
+                    "grade_no": group.grade_no,
+                }
+                for group in form.fields["class_group"].queryset
+            ],
+        }
+        return TemplateResponse(
+            request, "admin/courses/ntubtimetablesnapshot/sync_official.html", context)
 
     def scope_queryset(self, request, queryset):
         return queryset.filter(class_group__in=scoped_class_groups(request.user))
@@ -232,18 +357,253 @@ class NtubTimetableSnapshotAdmin(ScopedReadOnlyAdmin):
         return obj.entries.count()
 
 
+class OfficialTimetableSyncForm(forms.Form):
+    academic_year = forms.CharField(label="學年度", max_length=20)
+    semester = forms.ChoiceField(label="學期", choices=[("1", "第 1 學期"), ("2", "第 2 學期")])
+    program_type = forms.ModelChoiceField(label="學制", queryset=AcademicProgramType.objects.none())
+    department = forms.ModelChoiceField(label="系所", queryset=AcademicDepartment.objects.none())
+    grade_no = forms.ChoiceField(label="年級", choices=(), required=False)
+    class_group = forms.ModelChoiceField(label="班級", queryset=AcademicClassGroup.objects.none())
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.user = user
+        groups = scoped_class_groups(user).select_related("department__program_type")
+        self.fields["class_group"].queryset = groups
+        self.fields["department"].queryset = scoped_departments(user).select_related(
+            "program_type")
+        self.fields["program_type"].queryset = AcademicProgramType.objects.filter(
+            departments__in=self.fields["department"].queryset).distinct()
+        grades = set(groups.values_list("grade_no", flat=True))
+        self.fields["grade_no"].choices = [
+            (str(grade), f"{grade} 年級")
+            for grade in sorted((grade for grade in grades if grade is not None),
+                                key=int)
+        ]
+        if None in grades:
+            self.fields["grade_no"].choices.append(("__none__", "未設定年級"))
+
+    def clean_academic_year(self):
+        value = self.cleaned_data["academic_year"].strip()
+        if not value.isdigit():
+            raise forms.ValidationError("學年度必須是數字。")
+        return value
+
+    def clean_class_group(self):
+        group = self.cleaned_data["class_group"]
+        if not scoped_class_groups(self.user).filter(pk=group.pk).exists():
+            raise forms.ValidationError("你沒有操作此班級的權限。")
+        return group
+
+    def clean(self):
+        cleaned = super().clean()
+        group = cleaned.get("class_group")
+        if not group:
+            return cleaned
+        if cleaned.get("program_type") and group.department.program_type_id != cleaned[
+                "program_type"].pk:
+            self.add_error("class_group", "班級不屬於所選學制。")
+        if cleaned.get("department") and group.department_id != cleaned["department"].pk:
+            self.add_error("class_group", "班級不屬於所選系所。")
+        selected_grade = cleaned.get("grade_no")
+        if selected_grade == "__none__" and group.grade_no is not None:
+            self.add_error("class_group", "班級不屬於未設定年級。")
+        elif selected_grade and selected_grade != "__none__" and str(
+                group.grade_no) != selected_grade:
+            self.add_error("class_group", "班級不屬於所選年級。")
+        return cleaned
+
+    def identifiers(self):
+        group = self.cleaned_data["class_group"]
+        return {
+            "academic_year": self.cleaned_data["academic_year"],
+            "semester": self.cleaned_data["semester"],
+            "class_code": group.code,
+            "class_name": group.name_zh,
+            "program_type_id": group.department.program_type_id,
+            "department_id": group.department_id,
+            "grade_no": group.grade_no,
+            "program_code": group.department.program_type.code,
+            "department_code": group.department.code,
+        }
+
+
+class NtubTimetableEntryForm(forms.ModelForm):
+    confirmed_credits = forms.IntegerField(
+        label="確認學分", required=False, min_value=0,
+        help_text="留空代表尚未核對；0 學分請明確填寫 0。")
+    credit_source_note = forms.CharField(
+        label="學分來源／備註", required=False, max_length=255)
+
+    class Meta:
+        model = NtubTimetableEntry
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            credit = OfficialCourseCredit.objects.filter(
+                term=self.instance.snapshot.term,
+                class_group=self.instance.snapshot.class_group,
+                course_code=self.instance.course_code).first()
+            if credit is not None:
+                self.initial["confirmed_credits"] = credit.credits
+                self.initial["credit_source_note"] = credit.source_note
+
+    def clean(self):
+        cleaned = super().clean()
+        credits = cleaned.get("confirmed_credits")
+        if credits is not None:
+            entry_type = cleaned.get("entry_type", self.instance.entry_type)
+            course_code = cleaned.get("course_code", self.instance.course_code)
+            if entry_type != "course":
+                self.add_error("confirmed_credits", "官方活動不得建立課程學分核對資料。")
+            if not (course_code or "").strip():
+                self.add_error("confirmed_credits", "缺少課號，無法建立學分核對資料。")
+        return cleaned
+
+
 @admin.register(NtubTimetableEntry)
-class NtubTimetableEntryAdmin(ScopedReadOnlyAdmin):
+class NtubTimetableEntryAdmin(MaintainerScopedAdmin):
+    form = NtubTimetableEntryForm
     list_display = ["snapshot", "entry_type", "weekday", "start_period", "end_period",
                     "course_code", "official_serial", "course_name", "teacher_name",
-                    "classroom"]
+                    "classroom", "confirmed_credits_display"]
     list_filter = ["entry_type", "weekday", "snapshot__term"]
     search_fields = ["course_code", "course_name", "teacher_name", "classroom",
                      "snapshot__class_group__code"]
     list_select_related = ["snapshot", "snapshot__class_group", "snapshot__term"]
+    readonly_fields = [
+        "snapshot",
+        "entry_type", "course_code", "official_serial", "course_name",
+        "teacher_name", "classroom", "weekday", "start_period", "end_period",
+        "periods", "raw_text", "course_href",
+    ]
 
-    def scope_queryset(self, request, queryset):
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
         return queryset.filter(snapshot__class_group__in=scoped_class_groups(request.user))
+
+    def has_add_permission(self, request):
+        return is_superuser(request.user) or request.user.has_perm(
+            "courses.add_officialcoursecredit")
+
+    def has_change_permission(self, request, obj=None):
+        if not (is_superuser(request.user) or request.user.has_perm(
+                "courses.change_officialcoursecredit")):
+            return False
+        if obj is None:
+            return True
+        return self.get_queryset(request).filter(pk=obj.pk).exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_readonly_fields(self, request, obj=None):
+        # 新增時允許填入完整官方明細；既有匯入資料的原始欄位不可覆蓋。
+        return self.readonly_fields if obj is not None else []
+
+    @admin.display(description="確認學分")
+    def confirmed_credits_display(self, obj):
+        if obj.entry_type != "course" or not obj.course_code:
+            return "—"
+        credit = OfficialCourseCredit.objects.filter(
+            term=obj.snapshot.term, class_group=obj.snapshot.class_group,
+            course_code=obj.course_code).first()
+        return "學分待確認" if credit is None else credit.credits
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "snapshot":
+            kwargs["queryset"] = NtubTimetableSnapshot.objects.filter(
+                class_group__in=scoped_class_groups(request.user))
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        credits = form.cleaned_data.get("confirmed_credits")
+        if credits is None or obj.entry_type != "course" or not obj.course_code:
+            return
+        OfficialCourseCredit.objects.update_or_create(
+            term=obj.snapshot.term,
+            class_group=obj.snapshot.class_group,
+            course_code=obj.course_code,
+            defaults={"credits": credits,
+                      "source_note": form.cleaned_data.get("credit_source_note", "")},
+        )
+
+
+@admin.register(OfficialCourseCredit)
+class OfficialCourseCreditAdmin(MaintainerScopedAdmin):
+    list_display = ["term", "class_group", "course_code", "credits", "source_note"]
+    list_filter = ["term", "class_group__department__program_type"]
+    search_fields = ["course_code", "class_group__code", "class_group__name_zh", "source_note"]
+    list_select_related = ["term", "class_group"]
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(
+            class_group__in=scoped_class_groups(request.user))
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "class_group":
+            kwargs["queryset"] = scoped_class_groups(request.user)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+@admin.register(OfficialTeachingSyllabus)
+class OfficialTeachingSyllabusAdmin(MaintainerScopedAdmin):
+    list_display = ["academic_year", "semester", "class_code", "course_code",
+                    "course_name", "credits", "status", "fetched_at"]
+    list_filter = ["status", "academic_year", "semester"]
+    search_fields = ["class_code", "course_code", "course_name", "teacher_name"]
+    readonly_fields = ["academic_year", "semester", "class_code", "official_serial",
+                       "course_code", "course_name", "course_name_en", "credits",
+                       "weekly_hours", "teacher_name", "teaching_target",
+                       "teaching_matter", "weekly_progress", "assessment",
+                       "references", "source_url", "fetched_at", "status",
+                       "error_message", "raw_payload", "created_at", "updated_at"]
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path("retry/<int:object_id>/",
+                 self.admin_site.admin_view(self.retry_syllabus),
+                 name="courses_officialteachingsyllabus_retry"),
+        ]
+        return custom + urls
+
+    def retry_syllabus(self, request, object_id):
+        if request.method != "POST":
+            raise PermissionDenied("請以 POST 重試官方課綱。")
+        record = self.get_queryset(request).filter(pk=object_id).first()
+        if record is None:
+            raise PermissionDenied("你沒有重試此課綱的權限。")
+        record = sync_syllabus({
+            "academic_year": record.academic_year,
+            "semester": record.semester,
+            "class_code": record.class_code,
+            "official_serial": record.official_serial,
+            "course_code": record.course_code,
+        })
+        self.message_user(
+            request,
+            f"{record.course_code}：{record.get_status_display()}",
+            messages.SUCCESS if record.status == "success" else messages.WARNING,
+        )
+        return HttpResponseRedirect(
+            reverse("admin:courses_officialteachingsyllabus_changelist"))
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(
+            class_code__in=scoped_class_groups(request.user).values("code"))
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(NtubOfferingSource)
@@ -259,6 +619,30 @@ class NtubOfferingSourceAdmin(ScopedReadOnlyAdmin):
                      "class_group__code", "classroom_code", "classroom_name"]
     list_select_related = ["term", "class_group", "course", "section", "teacher"]
     date_hierarchy = "retrieved_at"
+    change_list_template = "admin/courses/ntubofferingsource/change_list.html"
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path("sync-syllabi/", self.admin_site.admin_view(self.sync_syllabi),
+                 name="courses_ntubofferingsource_sync_syllabi"),
+        ]
+        return custom + urls
+
+    def sync_syllabi(self, request):
+        if request.method != "POST":
+            raise PermissionDenied("請以 POST 執行官方課綱補抓。")
+        records = sync_offering_syllabi(self.get_queryset(request))
+        succeeded = sum(record.status == "success" for record in records)
+        failed = len(records) - succeeded
+        self.message_user(
+            request,
+            f"課綱補抓完成：成功 {succeeded} 筆，失敗 {failed} 筆；"
+            "失敗資料保留，可稍後重試。",
+            messages.SUCCESS if not failed else messages.WARNING,
+        )
+        return HttpResponseRedirect(
+            reverse("admin:courses_ntubofferingsource_changelist"))
 
     def scope_queryset(self, request, queryset):
         return queryset.filter(class_group__in=scoped_class_groups(request.user))
@@ -767,6 +1151,84 @@ class SectionClassPolicyAdmin(admin.ModelAdmin):
         self.message_user(request, f"已撤回 {withdrawn} 筆修課政策。")
 
 
+class CourseMaintainerScopeAdminForm(forms.ModelForm):
+    # 保留舊版單一 department POST 的相容輸入；畫面改用 departments。
+    department = forms.ModelChoiceField(
+        queryset=AcademicDepartment.objects.all(),
+        required=False,
+        widget=forms.HiddenInput,
+    )
+    departments = forms.ModelMultipleChoiceField(
+        label="授權系所（可跨學制多選）",
+        queryset=AcademicDepartment.objects.select_related("program_type").order_by(
+            "program_type__sort_order", "program_type__code", "code"
+        ),
+        required=False,
+        help_text="請選取現有系所；修改既有範圍時，原系所會保留，停用請使用列表操作。",
+        widget=forms.SelectMultiple(attrs={"size": 12}),
+    )
+    department_catalog = forms.CharField(
+        required=False,
+        label="系所資料",
+        widget=forms.HiddenInput,
+    )
+
+    class Meta:
+        model = CourseMaintainerScope
+        fields = ["user", "department", "departments", "department_catalog", "is_active"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        departments = self.fields["departments"].queryset
+        class_groups = AcademicClassGroup.objects.filter(
+            department__in=departments
+        ).values("id", "department_id", "grade_no", "code", "name_zh")
+        catalog = [
+            {
+                "id": department.pk,
+                "code": department.code,
+                "name": department.name_zh,
+                "program_id": department.program_type_id,
+                "program_code": department.program_type.code,
+                "program_name": department.program_type.name_zh,
+                "classes": [
+                    {
+                        "id": group["id"],
+                        "grade": group["grade_no"],
+                        "code": group["code"],
+                        "name": group["name_zh"],
+                    }
+                    for group in class_groups
+                    if group["department_id"] == department.pk
+                ],
+            }
+            for department in departments
+        ]
+        self.initial["department_catalog"] = json.dumps(catalog, ensure_ascii=False)
+        if self.instance.pk:
+            self.fields["departments"].initial = CourseMaintainerScope.objects.filter(
+                user=self.instance.user, is_active=True
+            ).values_list("department_id", flat=True)
+
+    def clean_departments(self):
+        departments = self.cleaned_data["departments"]
+        if not departments and self.cleaned_data.get("department") is not None:
+            departments = [self.cleaned_data["department"]]
+        if not departments:
+            raise forms.ValidationError("請至少選取一個授權系所。")
+        if self.instance.pk and self.instance.department_id not in {
+            department.pk for department in departments
+        }:
+            raise forms.ValidationError("修改既有授權時不可移除原系所，請使用停用操作。")
+        return departments
+
+    def clean_user(self):
+        user = self.cleaned_data["user"]
+        if self.instance.pk and user.pk != self.instance.user_id:
+            raise forms.ValidationError("既有授權不可更換維護員帳號。")
+        return user
+
+
 @admin.register(CourseMaintainerScope)
 class CourseMaintainerScopeAdmin(admin.ModelAdmin):
     """維護員權限範圍：只有 superuser 能新增、修改、刪除。
@@ -778,7 +1240,8 @@ class CourseMaintainerScopeAdmin(admin.ModelAdmin):
     list_display = ["user", "department", "is_active", "updated_at"]
     list_filter = ["is_active", "department"]
     search_fields = ["user__email", "user__username", "department__code", "department__name_zh"]
-    autocomplete_fields = ["user", "department"]
+    form = CourseMaintainerScopeAdminForm
+    change_form_template = "admin/courses/coursemaintainerscope/change_form.html"
     actions = ["grant_selected_scopes", "revoke_selected_scopes"]
 
     def has_module_permission(self, request):
@@ -797,7 +1260,31 @@ class CourseMaintainerScopeAdmin(admin.ModelAdmin):
         return is_superuser(request.user)
 
     def save_model(self, request, obj, form, change):
+        departments = list(form.cleaned_data["departments"])
+        obj.department = departments[0]
+        if not change:
+            existing = CourseMaintainerScope.objects.filter(
+                user=obj.user, department=obj.department
+            ).first()
+            if existing is not None:
+                obj.pk = existing.pk
+                obj._state.adding = False
+                obj.created_at = existing.created_at
+                obj.updated_at = existing.updated_at
         super().save_model(request, obj, form, change)
+        for department in departments[1:]:
+            scope, created = CourseMaintainerScope.objects.get_or_create(
+                user=obj.user,
+                department=department,
+                defaults={"is_active": obj.is_active},
+            )
+            if not created and scope.is_active != obj.is_active:
+                scope.is_active = obj.is_active
+                scope.save(update_fields=["is_active", "updated_at"])
+            if obj.is_active:
+                grant_maintainer_access(scope.user)
+            else:
+                revoke_maintainer_access(scope.user)
         # 授權的當下就把帳號放進維護員群組並開啟 staff，維護員才能進 /admin/。
         if obj.is_active:
             grant_maintainer_access(obj.user)

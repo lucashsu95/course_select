@@ -181,6 +181,36 @@ class ImportPayloadTests(TimetableImportTestCase):
         self.assertEqual(entry.teacher_name, "新老師")
         self.assertEqual(NtubTimetableEntry.objects.count(), 2)
 
+    def test_reimport_moves_course_without_deleting_it(self):
+        import_payload(build_payload())
+        entry = NtubTimetableEntry.objects.get(entry_type="course")
+        entry_id = entry.pk
+
+        payload = build_payload()
+        payload["classes"][0]["entries"][0].update(
+            weekday=3, start_period=5, end_period=7, periods=[5, 6, 7])
+        import_payload(payload)
+
+        entry.refresh_from_db()
+        self.assertEqual(entry.pk, entry_id)
+        self.assertEqual((entry.weekday, entry.start_period, entry.end_period),
+                         (3, 5, 7))
+        self.assertEqual(entry.periods, [5, 6, 7])
+
+    def test_invalid_position_does_not_overwrite_existing_snapshot(self):
+        import_payload(build_payload())
+        entry = NtubTimetableEntry.objects.get(entry_type="course")
+        original = (entry.weekday, entry.start_period, entry.end_period)
+
+        payload = build_payload()
+        payload["classes"][0]["entries"][0]["weekday"] = None
+        with self.assertRaises(TimetableImportError):
+            import_payload(payload)
+
+        entry.refresh_from_db()
+        self.assertEqual(
+            (entry.weekday, entry.start_period, entry.end_period), original)
+
     def test_import_does_not_create_course_section_or_enrollment(self):
         user = get_user_model().objects.create_user("student")
 

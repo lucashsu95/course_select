@@ -16,6 +16,7 @@ standing 也帶著加選判定需要的另外三樣東西：
 """
 from dataclasses import dataclass, field
 
+from .credits import summarize_credits
 from .models import (Enrollment, NtubTimetableEntry, Section,
                      SectionClassPolicy, StudentAcademicProfile)
 from .waitlist import positions
@@ -84,6 +85,7 @@ class Standing:
     class_group: object = None  # 學生的班級（沒有學籍就是 None）
     policies: dict = field(default_factory=dict)  # {section_id: SectionClassPolicy}
     official_entries: tuple = ()  # 官方班級課表的課程時段
+    credit_summary: object = None
 
     @property
     def section_ids(self):
@@ -96,13 +98,18 @@ def get_standing(user, term, *, include_waiting=True):
     `include_waiting=False` 給候補遞補用：遞補不需要順位資訊，省下查詢。
     """
     if not user.is_authenticated or term is None:
-        return Standing(sections=(), waiting={}, credits=0, passed=frozenset())
+        summary = summarize_credits(None, None)
+        return Standing(sections=(), waiting={}, credits=summary.total,
+                        passed=frozenset(), credit_summary=summary)
     sections = enrolled_sections(user, term)
     class_group = student_class_group(user)
+    entries = official_entries(class_group, term)
+    credit_summary = summarize_credits(class_group, term, sections, entries)
     return Standing(sections=sections,
                     waiting=positions(user, term) if include_waiting else {},
-                    credits=total_credits(sections),
+                    credits=credit_summary.total,
                     passed=completed_codes(user),
                     class_group=class_group,
                     policies=class_policies(class_group, term),
-                    official_entries=official_entries(class_group, term))
+                    official_entries=entries,
+                    credit_summary=credit_summary)

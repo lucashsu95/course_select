@@ -56,6 +56,7 @@ TEMPLATES = [
 
                 # 原本的課程功能
                 "courses.context_processors.waitlist_banner",
+                "courses.context_processors.admin_dashboard",
 
                 # 佳欣新增的學生端 UI
                 "courses.context_processors.ui_shell",

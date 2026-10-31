@@ -121,6 +121,9 @@ def evaluate(standing, section, window):
                        "blocked_conflict", "error")
     if section.is_full:
         return Verdict("waitlisted", f"{section.label_display}已額滿。", "waitlist", "info")
-    if standing.credits + course.credits > settings.MAX_CREDITS:
-        return Verdict("over_credits", f"超過學分上限 {settings.MAX_CREDITS}。", "blocked_credits", "error")
+    maximum = (standing.credit_summary.limits.maximum
+               if standing.credit_summary and standing.credit_summary.limits
+               else settings.MAX_CREDITS)
+    if standing.credits + course.credits > maximum:
+        return Verdict("over_credits", f"超過學分上限 {maximum}。", "blocked_credits", "error")
     return Verdict("enrolled", f"已加選「{course.name} {section.label_display}」。", "enroll", "success")

@@ -1,4 +1,3 @@
-from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Exists, OuterRef, Q
@@ -13,7 +12,9 @@ from . import waitlist
 from .academic import google_identity
 from .forms import AcademicSetupForm, cascade_context, selected_values
 from .models import (Course, Enrollment, NtubOfferingSource, NtubTimetableSnapshot,
-                    Section, SectionClassPolicy, StudentAcademicProfile, Term, Waitlist)
+                    NtubTimetableEntry, OfficialCourseCredit, OfficialTeachingSyllabus,
+                    Section, SectionClassPolicy,
+                    StudentAcademicProfile, Term, Waitlist)
 from .ntub_schedule_grid import (DAYS, KIND_ENROLLMENT, KIND_OFFICIAL_ACTIVITY,
                                  KIND_OFFICIAL_COURSE, KIND_OFFICIAL_ENROLLMENT,
                                  GridItem, base_periods_for, build_week_grid)
@@ -195,10 +196,32 @@ def course_detail(request, pk):
     related = list(Course.objects.filter(teacher=course.teacher, term=course.term).exclude(pk=pk)
                    .select_related("teacher")[:4])
     prereqs = [(c, c.code in standing.passed) for c in sorted(course.prerequisites.all(), key=lambda c: c.code)]
+    syllabus_filter = {
+        "academic_year": course.term.code.split("-", 1)[0],
+        "semester": course.term.code.split("-", 1)[1],
+        "course_code": course.code,
+        "status": "success",
+    }
+    if standing.class_group is not None:
+        syllabus_filter["class_code"] = standing.class_group.code
+    official_syllabus = OfficialTeachingSyllabus.objects.filter(
+        **syllabus_filter).order_by("-updated_at").first()
+    official_credit_conflicts = []
+    if official_syllabus is not None:
+        credit_filter = {"term": course.term, "course_code": course.code}
+        if standing.class_group is not None:
+            credit_filter["class_group"] = standing.class_group
+        official_credit_conflicts = list(
+            OfficialCourseCredit.objects.filter(**credit_filter).exclude(
+                credits=official_syllabus.credits).values_list(
+                    "class_group__code", "credits")
+        )
     return render(request, "courses/detail.html", {
         "course": course, "sections": sections, "my_section": my_section, "is_teacher": is_teacher, "related": related,
         "window": _window_context(course.term),
         "prereqs": prereqs, "show_prereq_marks": request.user.is_authenticated,
+        "official_syllabus": official_syllabus,
+        "official_credit_conflicts": official_credit_conflicts,
     })
 
 
@@ -309,6 +332,12 @@ def my_schedule(request):
     # 但官方資料（教師、教室）與本站資料（班別、教室、老師）都保留。
     official_course_entries = ([e for e in snapshot.entries.all()
                                 if e.entry_type == "course"] if snapshot else [])
+    credit_summary = standing.credit_summary
+    credit_rows = {
+        row.course_code: row.credits
+        for row in OfficialCourseCredit.objects.filter(
+            class_group=standing.class_group, term=term)
+    } if standing.class_group is not None and term is not None else {}
     merged_entry_ids = set()
     for s in mine:
         entry = _match_official_entry(s, official_course_entries)
@@ -329,6 +358,10 @@ def my_schedule(request):
                     "weekday_label": weekday_labels.get(entry.weekday, ""),
                     "start_period": entry.start_period,
                     "end_period": entry.end_period,
+                    "credits": credit_rows.get(entry.course_code),
+                    "course": Course.objects.filter(
+                        term=term, code=entry.course_code).first(),
+                    "url": reverse("official_course_detail", args=[entry.pk]),
                 })
             else:
                 kind = KIND_OFFICIAL_ACTIVITY
@@ -343,6 +376,8 @@ def my_schedule(request):
                 title=entry.course_name,
                 subtitle=entry.teacher_name,
                 meta=entry.classroom,
+                url=(reverse("official_course_detail", args=[entry.pk])
+                     if entry.entry_type == "course" else None),
             ))
 
     for s in mine:
@@ -381,7 +416,51 @@ def my_schedule(request):
         "official_courses": official_courses,
         "official_course_rows": official_course_rows,
         "official_courses_count": len(official_courses),
-        "total": standing.credits, "max": settings.MAX_CREDITS,
+        "credit_summary": credit_summary,
+        "total": credit_summary.total,
+        "max": credit_summary.limits.maximum if credit_summary.limits else None,
+        "min": credit_summary.limits.minimum if credit_summary.limits else None,
+        "minimum_gap": (
+            max(credit_summary.limits.minimum - credit_summary.total, 0)
+            if credit_summary.limits else None),
+        "available_credits": (
+            max(credit_summary.limits.maximum - credit_summary.total, 0)
+            if credit_summary.limits else None),
+        "below_minimum": (
+            credit_summary.complete and credit_summary.limits is not None
+            and credit_summary.total < credit_summary.limits.minimum),
+    })
+
+
+@login_required
+def official_course_detail(request, entry_id):
+    """顯示目前學生所屬班級的官方課表課程與教學大綱。"""
+    term = Term.current()
+    profile = (StudentAcademicProfile.objects
+               .select_related("class_group")
+               .filter(user=request.user).first())
+    if profile is None or term is None:
+        raise Http404
+    entry = get_object_or_404(
+        NtubTimetableEntry.objects.select_related(
+            "snapshot__term", "snapshot__class_group"),
+        pk=entry_id,
+        snapshot__term=term,
+        snapshot__class_group=profile.class_group,
+        entry_type="course",
+    )
+    syllabus = OfficialTeachingSyllabus.objects.filter(
+        academic_year=term.code.split("-", 1)[0],
+        semester=term.code.split("-", 1)[1],
+        class_code=entry.snapshot.class_group.code,
+        official_serial=entry.official_serial,
+        course_code=entry.course_code,
+        status="success",
+    ).first()
+    return render(request, "courses/official_course_detail.html", {
+        "entry": entry,
+        "snapshot": entry.snapshot,
+        "syllabus": syllabus,
     })
 
 

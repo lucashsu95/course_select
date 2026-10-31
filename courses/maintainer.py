@@ -29,13 +29,24 @@ MAINTAINER_PERMISSION_CODENAMES = [
     "courses.view_academicdepartment",
     "courses.view_academicprogramtype",
     "courses.view_course",
+    "courses.add_course",
+    "courses.change_course",
     "courses.view_ntubcurriculumrecommendation",
     "courses.view_ntubofferingambiguity",
     "courses.view_ntubofferingsource",
     "courses.view_ntubrecommendationcandidate",
     "courses.view_ntubtimetableentry",
     "courses.view_ntubtimetablesnapshot",
+    "courses.view_officialteachingsyllabus",
+    "courses.add_officialteachingsyllabus",
+    "courses.change_officialteachingsyllabus",
+    "courses.view_officialcoursecredit",
+    "courses.add_officialcoursecredit",
+    "courses.change_officialcoursecredit",
+    "courses.delete_officialcoursecredit",
     "courses.view_section",
+    "courses.add_section",
+    "courses.change_section",
     "courses.add_sectionclasspolicy",
     "courses.change_sectionclasspolicy",
     "courses.delete_sectionclasspolicy",
@@ -134,10 +145,20 @@ def revoke_maintainer_access(user) -> bool:
     if user is None:
         return False
     group = Group.objects.filter(name=MAINTAINER_GROUP_NAME).first()
+    still_scoped = CourseMaintainerScope.objects.filter(user=user, is_active=True).exists()
+    if still_scoped:
+        # 停用其中一筆範圍時，其他有效範圍仍需要完整的維護員存取權。
+        grant_maintainer_access(user)
+        return True
     if group is not None:
         user.groups.remove(group)
-    still_scoped = CourseMaintainerScope.objects.filter(user=user, is_active=True).exists()
-    if not still_scoped and not user.is_superuser and user.is_staff:
+    has_independent_group = (
+        group is not None
+        and user.groups.exclude(pk=group.pk).exists()
+    )
+    has_direct_permissions = user.user_permissions.exists()
+    if (not user.is_superuser and not has_independent_group
+            and not has_direct_permissions and user.is_staff):
         user.is_staff = False
         user.save(update_fields=["is_staff"])
     return True
@@ -175,7 +196,8 @@ def scoped_courses(user) -> QuerySet:
         return Course.objects.none()
     group_ids = scoped_class_groups(user).values_list("id", flat=True)
     return Course.objects.filter(
-        Q(sections__ntub_offering_sources__class_group_id__in=group_ids)
+        Q(owning_department__in=scoped_departments(user))
+        | Q(sections__ntub_offering_sources__class_group_id__in=group_ids)
         | Q(sections__class_policies__class_group_id__in=group_ids)
         | Q(ntub_recommendations__class_group_id__in=group_ids)
     ).distinct()
@@ -193,6 +215,8 @@ def scoped_sections(user) -> QuerySet:
         return Section.objects.none()
     group_ids = scoped_class_groups(user).values_list("id", flat=True)
     return Section.objects.filter(
+        Q(course__owning_department__in=scoped_departments(user))
+        |
         Q(ntub_offering_sources__class_group_id__in=group_ids)
         | Q(class_policies__class_group_id__in=group_ids)
         | Q(course__ntub_recommendations__class_group_id__in=group_ids)

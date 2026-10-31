@@ -28,7 +28,7 @@ from django.urls import reverse
 from ..models import (AcademicCatalog, AcademicClassGroup, AcademicDepartment,
                       AcademicProgramType, Course, Enrollment, NtubTimetableEntry,
                       NtubTimetableSnapshot, Section, StudentAcademicProfile,
-                      Teacher, Term)
+                      Teacher, Term, OfficialTeachingSyllabus)
 from ..ntub_schedule_grid import (KIND_ENROLLMENT, KIND_OFFICIAL_ACTIVITY,
                                   KIND_OFFICIAL_COURSE, GridItem,
                                   base_periods_for, build_week_grid)
@@ -128,6 +128,44 @@ class OfficialTimetableContentTests(ScheduleTestCase):
         self.assertContains(r, "體育三(上)")
         self.assertEqual(r.context["official_courses_count"], 5)
 
+    def test_official_course_links_to_scoped_detail_page(self):
+        self.profile_for(self.group_40630b)
+        entry = NtubTimetableEntry.objects.get(
+            snapshot__class_group=self.group_40630b,
+            course_name="生活藝術賞析")
+        OfficialTeachingSyllabus.objects.create(
+            academic_year="115", semester="1", class_code="40630B",
+            official_serial=entry.official_serial, course_code=entry.course_code,
+            course_name="生活藝術賞析", course_name_en="APPRECIATION OF LIFE ART",
+            credits="2.0", weekly_hours="2.0", teacher_name="張婕",
+            weekly_progress={"week_01": "表演藝術的性別平權", "week_18": "期末考"},
+            assessment="平時30%", references="表演的藝術", status="success")
+        response = self.client.get(reverse("my_schedule"))
+        detail_url = reverse("official_course_detail", args=[entry.pk])
+        self.assertContains(response, f'href="{detail_url}"')
+        detail = self.client.get(detail_url)
+        self.assertEqual(detail.status_code, 200)
+        self.assertContains(detail, "張婕")
+        self.assertContains(detail, "表演藝術的性別平權")
+        self.assertContains(detail, "期末考")
+
+    def test_official_activity_is_not_a_detail_page(self):
+        self.profile_for(self.group_40630b)
+        activity = NtubTimetableEntry.objects.get(
+            snapshot__class_group=self.group_40630b, entry_type="activity",
+            course_name="共同空堂")
+        self.assertEqual(
+            self.client.get(reverse("official_course_detail", args=[activity.pk])).status_code,
+            404)
+
+    def test_official_course_detail_is_scoped_to_student_class(self):
+        self.profile_for(self.group_40630b)
+        other = NtubTimetableEntry.objects.filter(
+            snapshot__class_group=self.group_40620a, entry_type="course").first()
+        self.assertEqual(
+            self.client.get(reverse("official_course_detail", args=[other.pk])).status_code,
+            404)
+
     def test_schedule_shows_40630b_activities_as_gray_kind(self):
         self.profile_for(self.group_40630b)
         r = self.client.get(reverse("my_schedule"))
@@ -137,6 +175,12 @@ class OfficialTimetableContentTests(ScheduleTestCase):
         activities = [i for i in r.context["grid"].items
                       if i.kind == KIND_OFFICIAL_ACTIVITY]
         self.assertEqual(len(activities), 2)
+        self.assertTrue(all(item.url is None for item in activities))
+        activity_ids = NtubTimetableEntry.objects.filter(
+            snapshot__class_group=self.group_40630b,
+            entry_type="activity").values_list("pk", flat=True)
+        for activity_id in activity_ids:
+            self.assertNotContains(r, f'href="/official-course/{activity_id}/"')
 
     def test_schedule_shows_40620a_courses(self):
         self.profile_for(self.group_40620a)

@@ -12,6 +12,8 @@ urlpatterns = [
     path("section/<int:pk>/cancel-wait/", views.cancel_wait, name="cancel_wait"),
     path("ack-promotion/", views.ack_promotion, name="ack_promotion"),
     path("my/", views.my_schedule, name="my_schedule"),
+    path("official-course/<int:entry_id>/", views.official_course_detail,
+         name="official_course_detail"),
     path("teaching/", views.teaching_courses, name="teaching"),
     path("course/<int:pk>/roster/", views.course_roster, name="course_roster"),
 ]

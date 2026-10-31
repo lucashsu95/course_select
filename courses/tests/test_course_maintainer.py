@@ -490,6 +490,110 @@ class SuperuserAssignsMaintainerTests(TestCase):
         self.assertEqual(r.status_code, 200)
 
 
+class MaintainerCourseSectionAdminTests(MaintainerTestBase):
+    """維護員可管理明確歸屬於授權系所的新課程與班別。"""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.maintainer)
+
+    def course_data(self, code, department):
+        return {
+            "term": self.term.pk,
+            "owning_department": department.pk,
+            "code": code,
+            "name": "維護員新增課程",
+            "teacher": self.teacher.pk,
+            "credits": 3,
+            "syllabus": "",
+            "prerequisites": [],
+        }
+
+    def section_data(self, course):
+        return {
+            "course": course.pk,
+            "label": "A",
+            "day": 1,
+            "start_period": 1,
+            "end_period": 2,
+            "room": "",
+            "capacity": 40,
+        }
+
+    def test_group_sync_includes_course_and_section_write_permissions(self):
+        call_command("setup_course_maintainer_group", stdout=StringIO())
+        group = Group.objects.get(name=MAINTAINER_GROUP_NAME)
+        codenames = set(group.permissions.values_list("codename", flat=True))
+        self.assertTrue({"add_course", "change_course", "add_section", "change_section"} <= codenames)
+        self.assertNotIn("delete_course", codenames)
+        self.assertNotIn("delete_section", codenames)
+
+    def test_maintainer_can_create_owned_course_and_section(self):
+        course_response = self.client.post(
+            reverse("admin:courses_course_add"),
+            self.course_data("NEW406", self.dept_a),
+        )
+        self.assertEqual(course_response.status_code, 302)
+        course = Course.objects.get(code="NEW406")
+        self.assertEqual(course.owning_department_id, self.dept_a.pk)
+        self.assertContains(
+            self.client.get(reverse("admin:courses_course_changelist")),
+            "NEW406",
+        )
+
+        section_response = self.client.post(
+            reverse("admin:courses_section_add"),
+            self.section_data(course),
+        )
+        self.assertEqual(section_response.status_code, 302)
+        section = Section.objects.get(course=course, label="A")
+        self.assertContains(
+            self.client.get(reverse("admin:courses_section_changelist")),
+            "NEW406",
+        )
+
+        section_response = self.client.post(
+            reverse("admin:courses_section_change", args=[section.pk]),
+            {**self.section_data(course), "room": "A101"},
+        )
+        self.assertEqual(section_response.status_code, 302)
+        section.refresh_from_db()
+        self.assertEqual(section.room, "A101")
+
+    def test_maintainer_cannot_create_or_edit_unowned_course(self):
+        create_response = self.client.post(
+            reverse("admin:courses_course_add"),
+            self.course_data("NEW500", self.dept_b),
+        )
+        self.assertEqual(create_response.status_code, 200)
+        self.assertFalse(Course.objects.filter(code="NEW500").exists())
+
+        other = Course.objects.create(
+            term=self.term, owning_department=self.dept_b,
+            code="OTHER500", name="他系課程", teacher=self.teacher,
+        )
+        change_response = self.client.post(
+            reverse("admin:courses_course_change", args=[other.pk]),
+            self.course_data("OTHER500", self.dept_b),
+        )
+        self.assertEqual(change_response.status_code, 302)
+        other.refresh_from_db()
+        self.assertEqual(other.name, "他系課程")
+        self.assertEqual(
+            self.client.get(
+                reverse("admin:courses_course_change", args=[other.pk])
+            ).status_code,
+            302,
+        )
+
+    def test_new_course_requires_explicit_department(self):
+        data = self.course_data("NO-DEPT", self.dept_a)
+        data.pop("owning_department")
+        response = self.client.post(reverse("admin:courses_course_add"), data)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Course.objects.filter(code="NO-DEPT").exists())
+
+
 class SetupMaintainerGroupCommandTests(TestCase):
     """可重複執行的初始化指令：只建群組與權限，不會把學生加進群組。"""
 

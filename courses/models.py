@@ -38,6 +38,10 @@ class Term(models.Model):
 
 class Course(models.Model):
     term = models.ForeignKey(Term, on_delete=models.PROTECT, related_name="courses", verbose_name="學期")
+    owning_department = models.ForeignKey(
+        "AcademicDepartment", on_delete=models.PROTECT, null=True, blank=True,
+        related_name="owned_courses", verbose_name="管理系所",
+    )
     code = models.CharField("課號", max_length=20)
     name = models.CharField("課名", max_length=100)
     teacher = models.ForeignKey(Teacher, on_delete=models.PROTECT, verbose_name="老師")
@@ -371,6 +375,83 @@ class NtubTimetableEntry(models.Model):
 
     def __str__(self):
         return f"週{self.weekday} {self.start_period}-{self.end_period} {self.course_name}".strip()
+
+
+class OfficialTeachingSyllabus(models.Model):
+    """官方教師教學大綱快取；以校方五個識別欄位唯一定位。"""
+
+    STATUS_CHOICES = [
+        ("pending", "待同步"),
+        ("success", "已同步"),
+        ("failed", "同步失敗"),
+        ("conflict", "資料不一致"),
+    ]
+
+    academic_year = models.CharField("學年度", max_length=20)
+    semester = models.CharField("學期", max_length=20)
+    class_code = models.CharField("班級代碼", max_length=20)
+    official_serial = models.CharField("官方序號", max_length=20)
+    course_code = models.CharField("課號", max_length=20)
+    course_name = models.CharField("中文課名", max_length=100, blank=True)
+    course_name_en = models.CharField("英文課名", max_length=200, blank=True)
+    credits = models.DecimalField("官方學分", max_digits=6, decimal_places=2,
+                                  null=True, blank=True)
+    weekly_hours = models.DecimalField("每週時數", max_digits=6, decimal_places=2,
+                                       null=True, blank=True)
+    teacher_name = models.CharField("授課教師", max_length=100, blank=True)
+    teaching_target = models.TextField("教學目標", blank=True)
+    teaching_matter = models.TextField("教學內容", blank=True)
+    weekly_progress = models.JSONField("18週進度", default=dict, blank=True)
+    assessment = models.TextField("成績評量", blank=True)
+    references = models.TextField("參考資料", blank=True)
+    source_url = models.URLField("官方來源網址", max_length=500, blank=True)
+    fetched_at = models.DateTimeField("同步時間", null=True, blank=True)
+    status = models.CharField("結果狀態", max_length=20, choices=STATUS_CHOICES,
+                              default="pending")
+    error_message = models.TextField("錯誤原因", blank=True)
+    raw_payload = models.JSONField("原始識別資料", default=dict, blank=True)
+    created_at = models.DateTimeField("建立時間", auto_now_add=True)
+    updated_at = models.DateTimeField("更新時間", auto_now=True)
+
+    class Meta:
+        verbose_name = "官方教學大綱"
+        verbose_name_plural = "官方教學大綱"
+        ordering = ["academic_year", "semester", "class_code", "course_code"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["academic_year", "semester", "class_code",
+                        "official_serial", "course_code"],
+                name="official_syllabus_identity_unique",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.academic_year}-{self.semester} {self.class_code} {self.course_code}"
+
+
+class OfficialCourseCredit(models.Model):
+    """管理員核對的班級官方課程學分，不修改匯入的課表資料。"""
+
+    term = models.ForeignKey(Term, on_delete=models.PROTECT,
+                             related_name="official_course_credits", verbose_name="學期")
+    class_group = models.ForeignKey(AcademicClassGroup, on_delete=models.PROTECT,
+                                    related_name="official_course_credits", verbose_name="班級")
+    course_code = models.CharField("課號", max_length=20)
+    credits = models.PositiveSmallIntegerField("確認學分")
+    source_note = models.CharField("學分來源／備註", max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["term__code", "class_group__code", "course_code"]
+        verbose_name = "官方課程學分核對"
+        verbose_name_plural = "官方課程學分核對"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["term", "class_group", "course_code"],
+                name="official_course_credit_term_class_code_unique"),
+        ]
+
+    def __str__(self):
+        return f"{self.term.code} {self.class_group.code} {self.course_code}（{self.credits} 學分）"
 
 
 # --- NTUB 官方專業選修開課 -------------------------------------------------------

@@ -44,6 +44,38 @@
     <section class="panel detail-syllabus" id="course-syllabus">
       <h2>課程大綱</h2>
       <p>{{ course.syllabus|linebreaksbr|default:"尚無大綱。" }}</p>
+      {% if official_syllabus %}
+      <h3>官方教學大綱</h3>
+      {% if official_credit_conflicts %}
+      <p class="notice">官方課綱學分與人工核對資料不一致，請由管理員確認（人工核對值優先）。</p>
+      {% endif %}
+      <dl class="detail-facts">
+        <dt>開課班級</dt><dd>{{ official_syllabus.class_code }}</dd>
+        <dt>中文科目名稱</dt><dd>{{ official_syllabus.course_name }}</dd>
+        <dt>英文科目名稱</dt><dd>{{ official_syllabus.course_name_en }}</dd>
+        <dt>課號</dt><dd>{{ official_syllabus.course_code }}</dd>
+        <dt>官方學分</dt><dd>{{ official_syllabus.credits }}</dd>
+        <dt>每週上課時數</dt><dd>{{ official_syllabus.weekly_hours }}</dd>
+        <dt>任課老師</dt><dd>{{ official_syllabus.teacher_name }}</dd>
+      </dl>
+      <h4>教學目標</h4>
+      <p>{{ official_syllabus.teaching_target|linebreaksbr }}</p>
+      <h4>教學內容</h4>
+      <p>{{ official_syllabus.teaching_matter|linebreaksbr }}</p>
+      <h4>每週教學進度</h4>
+      <ol>
+        {% for week, text in official_syllabus.weekly_progress.items %}
+        <li>{{ week }}：{{ text }}</li>
+        {% endfor %}
+      </ol>
+      <h4>成績評量</h4>
+      <p>{{ official_syllabus.assessment|linebreaksbr }}</p>
+      <h4>指定教科書及參考書籍</h4>
+      <p>{{ official_syllabus.references|linebreaksbr }}</p>
+      <a href="{{ official_syllabus.source_url }}">查看官方原始教學大綱</a>
+      {% else %}
+      <p>官方教學大綱尚未同步。</p>
+      {% endif %}
     </section>
 
     <section class="panel detail-teacher" id="teacher-info">

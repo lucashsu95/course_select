@@ -38,6 +38,7 @@ SCOPE_LIMITED_LABELS = frozenset({
     "courses.ntubofferingsource",
     "courses.ntubtimetableentry",
     "courses.ntubtimetablesnapshot",
+    "courses.officialcoursecredit",
     "courses.ntubrecommendationcandidate",
     "courses.section",
     # SectionClassPolicyAdmin 的 queryset 一樣只撈授權系所底下的政策。
@@ -122,6 +123,10 @@ def _can_view(label):
     return can
 
 
+def can_dashboard(request):
+    return bool(request.user.is_authenticated and request.user.is_staff)
+
+
 # --- 選單結構 ---------------------------------------------------------------
 
 def _item(text, route, icon, can):
@@ -143,15 +148,38 @@ def _category(text, icon, items):
 #: 每一項都對應到既有的管理入口（URL 名稱沿用 Django Admin 官方的
 #: `<app_label>_<model_name>_changelist`），既有入口一個都沒有被拿掉。
 ADMIN_MENU = [
+    _category("管理總覽", "bi bi-speedometer2", [
+        _item("Dashboard", "admin:index", "bi bi-speedometer2", can_dashboard),
+    ]),
     _category("課程規劃", "bi bi-calendar-range", [
-        _item("班別修課政策", "admin:courses_sectionclasspolicy_changelist",
-              "bi bi-journal-check", _can_view("courses.sectionclasspolicy")),
-        _item("批次安排課程", "admin:courses_sectionclasspolicy_bulk_assign",
-              "bi bi-list-check", can_bulk_assign),
         _item("課程資料", "admin:courses_course_changelist",
               "bi bi-book", _can_view("courses.course")),
         _item("開課班別", "admin:courses_section_changelist",
               "bi bi-columns-gap", _can_view("courses.section")),
+        _item("批次安排課程", "admin:courses_sectionclasspolicy_bulk_assign",
+              "bi bi-list-check", can_bulk_assign),
+        _item("班別修課政策", "admin:courses_sectionclasspolicy_changelist",
+              "bi bi-journal-check", _can_view("courses.sectionclasspolicy")),
+    ]),
+    _category("班級固定課表", "bi bi-calendar-week", [
+        _item("官方班級課表", "admin:courses_ntubtimetablesnapshot_changelist",
+              "bi bi-calendar3", _can_view("courses.ntubtimetablesnapshot")),
+        _item("官方課表明細", "admin:courses_ntubtimetableentry_changelist",
+              "bi bi-list-ul", _can_view("courses.ntubtimetableentry")),
+        _item("官方課程學分核對", "admin:courses_officialcoursecredit_changelist",
+              "bi bi-calculator", _can_view("courses.officialcoursecredit")),
+        _item("官方教學大綱", "admin:courses_officialteachingsyllabus_changelist",
+              "bi bi-book-open", _can_view("courses.officialteachingsyllabus")),
+    ]),
+    _category("官方資料查核", "bi bi-database-check", [
+        _item("官方開課來源", "admin:courses_ntubofferingsource_changelist",
+              "bi bi-broadcast", _can_view("courses.ntubofferingsource")),
+        _item("課綱推薦", "admin:courses_ntubcurriculumrecommendation_changelist",
+              "bi bi-stars", _can_view("courses.ntubcurriculumrecommendation")),
+        _item("候選開課", "admin:courses_ntubrecommendationcandidate_changelist",
+              "bi bi-search", _can_view("courses.ntubrecommendationcandidate")),
+        _item("開課疑義", "admin:courses_ntubofferingambiguity_changelist",
+              "bi bi-question-circle", _can_view("courses.ntubofferingambiguity")),
     ]),
     _category("學籍與班級", "bi bi-mortarboard", [
         _item("學制", "admin:courses_academicprogramtype_changelist",
@@ -162,20 +190,6 @@ ADMIN_MENU = [
               "bi bi-people", _can_view("courses.academicclassgroup")),
         _item("學生學籍", "admin:courses_studentacademicprofile_changelist",
               "bi bi-person-vcard", _can_view("courses.studentacademicprofile")),
-    ]),
-    _category("官方資料", "bi bi-database-check", [
-        _item("官方開課來源", "admin:courses_ntubofferingsource_changelist",
-              "bi bi-broadcast", _can_view("courses.ntubofferingsource")),
-        _item("官方班級課表", "admin:courses_ntubtimetablesnapshot_changelist",
-              "bi bi-calendar3", _can_view("courses.ntubtimetablesnapshot")),
-        _item("官方課表明細", "admin:courses_ntubtimetableentry_changelist",
-              "bi bi-list-ul", _can_view("courses.ntubtimetableentry")),
-        _item("課綱推薦", "admin:courses_ntubcurriculumrecommendation_changelist",
-              "bi bi-stars", _can_view("courses.ntubcurriculumrecommendation")),
-        _item("候選開課", "admin:courses_ntubrecommendationcandidate_changelist",
-              "bi bi-search", _can_view("courses.ntubrecommendationcandidate")),
-        _item("開課疑義", "admin:courses_ntubofferingambiguity_changelist",
-              "bi bi-question-circle", _can_view("courses.ntubofferingambiguity")),
     ]),
     _category("選課與候補", "bi bi-person-check", [
         _item("加選紀錄", "admin:courses_enrollment_changelist",

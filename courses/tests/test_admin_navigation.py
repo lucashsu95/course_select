@@ -51,10 +51,11 @@ class AdminMenuStructureTests(TestCase):
         self.assertIsNotNone(cfg.get("admin_menu"))
         self.assertTrue(cfg["admin_menu"], "ADMINLTE['admin_menu'] 不可為空")
 
-    def test_has_five_chinese_categories(self):
+    def test_has_required_chinese_categories(self):
         menu = build_menu(self.superuser())
         self.assertEqual(category_titles(menu), [
-            "課程規劃", "學籍與班級", "官方資料", "選課與候補", "系統管理",
+            "管理總覽", "課程規劃", "班級固定課表", "官方資料查核",
+            "學籍與班級", "選課與候補", "系統管理",
         ])
 
     def test_expected_items_are_present(self):
