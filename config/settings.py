@@ -2,6 +2,11 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
+# 後台側邊欄的中文分類（AdminLTE 官方的 admin_menu 設定）。
+# 這個模組在 import 時不會碰 Django（app registry 還沒準備好），
+# 所有權限判斷都延後到 request 時間才進行。
+from courses.admin_navigation import ADMIN_MENU
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-change-me")
@@ -128,6 +133,9 @@ ADMINLTE = {
     "logo": "<b>NTUB</b> 課程管理",
     "admin_brand": "NTUB 課程管理",
     "sidebar_theme": "dark",
+    # 後台側邊欄改用自訂的五個中文分類（課程規劃／學籍與班級／官方資料／
+    # 選課與候補／系統管理），權限過濾走官方的 can 機制。
+    "admin_menu": ADMIN_MENU,
 }
 
 # --- ngrok demo：只在 USE_NGROK=1 時生效 ---
