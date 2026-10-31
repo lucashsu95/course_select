@@ -544,7 +544,7 @@ class SectionClassPolicyAdmin(admin.ModelAdmin):
             '{}</span>',
             "草稿",
         )
-        
+
     @admin.display(description="確認人", ordering="confirmed_by__username")
     def confirmed_by_display(self, obj):
         """誰確認了這筆政策（沒確認過就是「—」）。"""
