@@ -4,11 +4,12 @@ from django.contrib.auth.models import Group, User
 from django.contrib.sites.models import Site
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils import timezone
+from django.utils.html import format_html
 
 from allauth.account.models import EmailAddress
 from allauth.socialaccount.models import SocialAccount, SocialApp, SocialToken
@@ -358,6 +359,63 @@ restrict_to_superuser(
 )
 
 
+class PolicyTermFilter(admin.SimpleListFilter):
+    """依「學期」篩選修課政策。
+
+    學期是從 section → course → term 推導出來的，模型上沒有可直接篩選的欄位，
+    所以自己寫一支 SimpleListFilter。選項只列出 **目前使用者看得到的政策**
+    所涉及的學期（走 ModelAdmin.get_queryset()），維護員不會從篩選清單看到
+    別系政策的存在。
+    """
+
+    title = "學期"
+    parameter_name = "policy_term"
+
+    def lookups(self, request, model_admin):
+        queryset = model_admin.get_queryset(request).prefetch_related(None)
+        codes = (queryset.order_by()
+                 .values_list("section__course__term__code", flat=True)
+                 .distinct())
+        return [(code, code) for code in codes if code]
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if not value:
+            return queryset
+        return queryset.filter(section__course__term__code=value)
+
+
+class ApplicableClassGroupFilter(admin.SimpleListFilter):
+    """依「適用學生班級」篩選修課政策。
+
+    選項只列出 **目前使用者看得到的政策** 所涉及的班級：篩選器本身走的是
+    ModelAdmin.get_queryset()，所以 Course Maintainer 只會看到自己授權系所的
+    班級，不會因為篩選清單就看到別系的班級。
+
+    篩選用班級代碼（class_group__code）而不是主鍵：代碼是維護員在課表上
+    認得的東西，而且同一個班級代碼在不同匯入批次可能對到不同主鍵。
+    """
+
+    title = "適用學生班級"
+    parameter_name = "policy_class_group"
+
+    def lookups(self, request, model_admin):
+        # prefetch_related(None)：values_list 不需要預載，而且 Django 不允許
+        # 對 values() 結果做 prefetch。
+        queryset = model_admin.get_queryset(request).prefetch_related(None)
+        pairs = (queryset.order_by()
+                 .values_list("class_group__code", "class_group__name_zh")
+                 .distinct())
+        return [(code, f"{code} {name}".strip())
+                for code, name in pairs if code]
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if not value:
+            return queryset
+        return queryset.filter(class_group__code=value)
+
+
 @admin.register(SectionClassPolicy)
 class SectionClassPolicyAdmin(admin.ModelAdmin):
     """跨班修課政策：這個開課班別對哪個學生班級是什麼屬性、能不能自行加選。
@@ -375,12 +433,38 @@ class SectionClassPolicyAdmin(admin.ModelAdmin):
        （save_model），而且不會寫入任何資料。
     """
 
-    list_display = ["section", "class_group", "course_category", "can_enroll", "status",
-                    "confirmed_by", "confirmed_at"]
-    list_filter = ["status", "course_category", "can_enroll", "class_group__department"]
+    # --- 清單欄位 -----------------------------------------------------------
+    # 欄位順序對應維護員的判讀順序：這是誰的課、哪一門課、什麼屬性、有沒有開放。
+    list_display = [
+        "term_display",
+        "applicable_class_group_display",
+        "course_code_display",
+        "course_name_display",
+        "source_class_group_display",
+        "course_category_display",
+        "can_enroll_display",
+        "status_display",
+        "confirmed_by_display",
+        "confirmed_at_display",
+    ]
+    # 點課號進到該筆政策的編輯頁（學期欄只是說明用的文字，不做成連結）。
+    list_display_links = ("course_code_display",)
+    # 篩選：學期 / 適用班級 / 發布狀態，加上維護員原本就在用的分類與加選旗標。
+    list_filter = [
+        "section__course__term",
+        ApplicableClassGroupFilter,
+        "status",
+        "course_category",
+        "can_enroll",
+    ]
+    # 搜尋：課號、課名、班級代碼。
     search_fields = ["section__course__code", "section__course__name",
                      "class_group__code", "class_group__name_zh"]
     list_select_related = ["section__course__term", "class_group__department", "confirmed_by"]
+    list_per_page = 50
+    # 排序：最新的學期優先，然後課號、班別、班級代碼。
+    ordering = ["-section__course__term__code", "section__course__code",
+                "section__label", "class_group__code"]
     autocomplete_fields = ["section", "class_group"]
     fields = ["section", "class_group", "course_category", "can_enroll", "status",
               "notes", "confirmed_by", "confirmed_at"]
@@ -389,6 +473,87 @@ class SectionClassPolicyAdmin(admin.ModelAdmin):
     actions = ["publish_selected_policies", "withdraw_selected_policies"]
     # 批次安排入口的連結放在名單頁的 object-tools 區塊（見下方模板）。
     change_list_template = "admin/courses/sectionclasspolicy_change_list.html"
+
+    # --- 清單欄位的顯示邏輯 -------------------------------------------------
+
+    @admin.display(description="學期", ordering="section__course__term__code")
+    def term_display(self, obj):
+        """學期來自 section → course → term，不另外存一份。"""
+        return obj.section.course.term.code
+
+    @admin.display(description="適用學生班級", ordering="class_group__code")
+    def applicable_class_group_display(self, obj):
+        """適用的學生班級：班級代碼 + 班級名稱。"""
+        group = obj.class_group
+        name = group.name_zh or ""
+        return f"{group.code} {name}".strip()
+
+    @admin.display(description="課號", ordering="section__course__code")
+    def course_code_display(self, obj):
+        return obj.section.course.code
+
+    @admin.display(description="課名", ordering="section__course__name")
+    def course_name_display(self, obj):
+        return obj.section.course.name
+
+    @admin.display(description="來源開課班級")
+    def source_class_group_display(self, obj):
+        """官方來源對應到的開課班級代碼（沒有官方來源時顯示「—」）。
+
+        同一個 Section 可能對應到多筆官方來源（不同來源鍵），所以把代碼
+        去重後用「、」串起來；沒有資料時不顯示空白，讓維護員一眼看出
+        「這筆政策沒有官方來源」。
+        """
+        codes = sorted({source.class_group.code
+                        for source in obj.section.ntub_offering_sources.all()
+                        if source.class_group_id})
+        if not codes:
+            return "—"
+        return "、".join(codes)
+
+    @admin.display(description="修課分類", ordering="course_category")
+    def course_category_display(self, obj):
+        return obj.get_course_category_display()
+
+    @admin.display(description="可否自行加選", ordering="can_enroll")
+    def can_enroll_display(self, obj):
+        """可否自行加選：用顏色區分「可加選」與「不可加選」。
+
+        不可加選通常是本班必修（班級已有固定課表），這是維護員最常看錯的
+        一欄，所以用醒目的灰色標示。
+        """
+        if obj.can_enroll:
+            return format_html(
+                '<span style="color:#1a7f37;font-weight:600;">可自行加選</span>')
+        return format_html(
+            '<span style="color:#6c757d;font-weight:600;">不可自行加選</span>')
+
+    @admin.display(description="發布狀態", ordering="status")
+    def status_display(self, obj):
+        """發布狀態：已發布（綠）／草稿（灰）一目了然。"""
+        if obj.status == SectionClassPolicy.Status.PUBLISHED:
+            return format_html(
+                '<span style="color:#1a7f37;font-weight:700;'
+                'background:#e3f3e6;padding:1px 8px;border-radius:10px;">'
+                '已發布</span>')
+        return format_html(
+            '<span style="color:#6c757d;font-weight:600;'
+            'background:#f1f1f1;padding:1px 8px;border-radius:10px;">草稿</span>')
+
+    @admin.display(description="確認人", ordering="confirmed_by__username")
+    def confirmed_by_display(self, obj):
+        """誰確認了這筆政策（沒確認過就是「—」）。"""
+        user = obj.confirmed_by
+        if user is None:
+            return "—"
+        return user.email or user.get_username()
+
+    @admin.display(description="確認時間", ordering="confirmed_at")
+    def confirmed_at_display(self, obj):
+        """確認時間（台北時區；沒有確認過就是「—」）。"""
+        if obj.confirmed_at is None:
+            return "—"
+        return timezone.localtime(obj.confirmed_at).strftime("%Y-%m-%d %H:%M")
 
     def get_urls(self):
         """額外掛一個「批次安排班級課程」的獨立頁面。
@@ -508,9 +673,15 @@ class SectionClassPolicyAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
         if is_superuser(request.user):
-            return queryset
+            return queryset.prefetch_related(
+                Prefetch("section__ntub_offering_sources",
+                         queryset=NtubOfferingSource.objects.select_related("class_group")))
         # 政策屬於「適用班級」那個系所：跨班政策由學生端的系所負責維護。
-        return queryset.filter(class_group__department__in=scoped_departments(request.user))
+        return queryset.filter(
+            class_group__department__in=scoped_departments(request.user)
+        ).prefetch_related(
+            Prefetch("section__ntub_offering_sources",
+                     queryset=NtubOfferingSource.objects.select_related("class_group")))
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         # 下拉選單（與 autocomplete）只給授權系所的資料：偽造 POST 也選不到別系的班級。
